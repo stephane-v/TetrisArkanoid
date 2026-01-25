@@ -6,9 +6,11 @@ interface HUDProps {
   stats: GameStats;
   hasShield: boolean;
   activePowerUps: ActivePowerUp[];
+  modeTitle?: string;
+  humanTetrisScore?: number;
 }
 
-export const HUD: React.FC<HUDProps> = ({ stats, hasShield, activePowerUps }) => {
+export const HUD: React.FC<HUDProps> = ({ stats, hasShield, activePowerUps, modeTitle, humanTetrisScore }) => {
   const levelInfo = getLevelDisplayInfo(stats.level);
 
   return (
@@ -18,6 +20,13 @@ export const HUD: React.FC<HUDProps> = ({ stats, hasShield, activePowerUps }) =>
           <span className="text-gray-400">SCORE: </span>
           <span className="font-bold text-cyan-400">{stats.score.toLocaleString()}</span>
         </div>
+
+        {humanTetrisScore !== undefined && (
+          <div>
+            <span className="text-gray-400">TETRIS: </span>
+            <span className="font-bold text-purple-400">{humanTetrisScore.toLocaleString()}</span>
+          </div>
+        )}
 
         <div className="flex gap-1">
           {Array.from({ length: stats.lives }).map((_, i) => (
@@ -35,6 +44,10 @@ export const HUD: React.FC<HUDProps> = ({ stats, hasShield, activePowerUps }) =>
       </div>
 
       <div className="flex items-center gap-4">
+        {modeTitle && (
+          <div className="text-purple-400 text-xs">{modeTitle}</div>
+        )}
+
         {hasShield && (
           <div className="text-cyan-300 font-bold">[SHIELD]</div>
         )}

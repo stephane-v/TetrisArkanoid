@@ -9,6 +9,9 @@ import type {
   RobotState,
   GameOverReason,
   Particle,
+  GameMode,
+  HumanTetrisState,
+  AIPaddleState,
 } from '../types/game.types';
 import { CANVAS_CONFIG, GRID_CONFIG, getDifficultyConfig, SCORING, COMBO_TIMEOUT } from './utils/constants';
 import { createEmptyGrid, updateLineWarnings } from './entities/Grid';
@@ -26,9 +29,17 @@ import {
 } from './systems/PowerUps';
 import { checkLevelUp, getNextLevel, calculateLevelProgress } from './systems/Difficulty';
 import { gridToCanvas } from './utils/collision';
+import {
+  createHumanTetrisState,
+  updateHumanTetris,
+  canSpawnPiece,
+  type TetrisInput,
+} from './systems/HumanTetris';
+import { createAIPaddleState, updateAIPaddle } from './systems/AIPaddle';
 
 export interface GameEngineState {
   gameState: GameState;
+  gameMode: GameMode;
   balls: Ball[];
   paddle: Paddle;
   grid: GameGrid;
@@ -40,6 +51,9 @@ export interface GameEngineState {
   gameOverReason: GameOverReason;
   particles: Particle[];
   ballLaunched: boolean;
+  // Mode-specific state
+  humanTetris: HumanTetrisState | null;
+  aiPaddle: AIPaddleState | null;
 }
 
 export function createInitialState(): GameEngineState {
@@ -49,6 +63,7 @@ export function createInitialState(): GameEngineState {
 
   return {
     gameState: 'START',
+    gameMode: 'CLASSIC',
     balls: [createBall(paddleCenter.x, paddle.y - 20)],
     paddle,
     grid: createEmptyGrid(),
@@ -70,13 +85,34 @@ export function createInitialState(): GameEngineState {
     gameOverReason: null,
     particles: [],
     ballLaunched: false,
+    humanTetris: null,
+    aiPaddle: null,
   };
 }
 
-export function startGame(_state: GameEngineState): GameEngineState {
+export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC'): GameEngineState {
+  const baseState = createInitialState();
+
+  // Set up mode-specific state
+  let humanTetris: HumanTetrisState | null = null;
+  let aiPaddle: AIPaddleState | null = null;
+
+  if (mode === 'REVERSED' || mode === 'TWO_PLAYER') {
+    humanTetris = createHumanTetrisState();
+  }
+
+  if (mode === 'REVERSED') {
+    aiPaddle = createAIPaddleState(1);
+  }
+
   return {
-    ...createInitialState(),
+    ...baseState,
     gameState: 'PLAYING',
+    gameMode: mode,
+    humanTetris,
+    aiPaddle,
+    // In REVERSED mode, disable the robot
+    robot: mode === 'REVERSED' ? { ...baseState.robot, currentPiece: null } : baseState.robot,
   };
 }
 
@@ -103,15 +139,44 @@ export function launchBallAction(state: GameEngineState): GameEngineState {
   };
 }
 
+export interface GameInput {
+  mouseX: number | null;
+  leftPressed: boolean;
+  rightPressed: boolean;
+  // Tetris controls (for REVERSED and TWO_PLAYER modes)
+  tetrisInput?: TetrisInput;
+}
+
 export function updateGame(
+  state: GameEngineState,
+  deltaTime: number,
+  mouseX: number | null,
+  leftPressed: boolean,
+  rightPressed: boolean,
+  tetrisInput?: TetrisInput
+): GameEngineState {
+  if (state.gameState !== 'PLAYING') return state;
+
+  // Dispatch to mode-specific update
+  switch (state.gameMode) {
+    case 'CLASSIC':
+      return updateClassicMode(state, deltaTime, mouseX, leftPressed, rightPressed);
+    case 'REVERSED':
+      return updateReversedMode(state, deltaTime, tetrisInput);
+    case 'TWO_PLAYER':
+      return updateTwoPlayerMode(state, deltaTime, mouseX, leftPressed, rightPressed, tetrisInput);
+    default:
+      return state;
+  }
+}
+
+function updateClassicMode(
   state: GameEngineState,
   deltaTime: number,
   mouseX: number | null,
   leftPressed: boolean,
   rightPressed: boolean
 ): GameEngineState {
-  if (state.gameState !== 'PLAYING') return state;
-
   let newState = { ...state };
   const now = Date.now();
   const diffConfig = getDifficultyConfig(state.stats.level);
@@ -270,10 +335,322 @@ export function updateGame(
   // Update line warnings
   newState.grid = updateLineWarnings(newState.grid);
 
+  // Common updates
+  newState = updatePowerUpsAndParticles(newState, deltaTime, diffConfig);
+  newState = checkLevelUpAndProgress(newState);
+
+  return newState;
+}
+
+function updateReversedMode(
+  state: GameEngineState,
+  deltaTime: number,
+  tetrisInput?: TetrisInput
+): GameEngineState {
+  if (!state.humanTetris || !state.aiPaddle) return state;
+
+  let newState = { ...state };
+  const diffConfig = getDifficultyConfig(state.stats.level);
+
+  // Update survival time
+  newState.stats = {
+    ...newState.stats,
+    survivalTime: newState.stats.survivalTime + deltaTime,
+  };
+
+  // Update AI paddle
+  const aiResult = updateAIPaddle(
+    state.aiPaddle,
+    state.paddle,
+    state.balls,
+    state.grid,
+    deltaTime
+  );
+  newState.aiPaddle = aiResult.state;
+  newState.paddle = aiResult.paddle;
+
+  // If ball not launched, keep it on paddle
+  if (!newState.ballLaunched && newState.balls.length > 0) {
+    const paddleCenter = getPaddleCenter(newState.paddle);
+    newState.balls = [
+      {
+        ...newState.balls[0],
+        x: paddleCenter.x,
+        y: newState.paddle.y - 20,
+      },
+      ...newState.balls.slice(1),
+    ];
+    // AI auto-launches the ball after a short delay
+    if (newState.stats.survivalTime > 1) {
+      const launchedBall = launchBall(newState.balls[0], diffConfig.ballSpeed);
+      newState.balls = [launchedBall, ...newState.balls.slice(1)];
+      newState.ballLaunched = true;
+    }
+  }
+
+  // Update physics
+  if (newState.ballLaunched) {
+    const physicsResult = updatePhysics(
+      newState.balls,
+      newState.grid,
+      newState.paddle,
+      deltaTime,
+      diffConfig.ballSpeed
+    );
+
+    newState.balls = physicsResult.balls;
+    newState.grid = physicsResult.grid;
+
+    // Handle lost balls - in reversed mode, this benefits the human (Tetris player)
+    if (physicsResult.lostBalls.length > 0) {
+      // Human Tetris player gains points when AI loses ball
+      newState.stats = {
+        ...newState.stats,
+        score: newState.stats.score + 100 * physicsResult.lostBalls.length,
+      };
+    }
+
+    // Handle destroyed blocks
+    if (physicsResult.blocksDestroyed.length > 0) {
+      // AI destroyed blocks - penalty for human
+      newState.stats = {
+        ...newState.stats,
+        blocksDestroyed: newState.stats.blocksDestroyed + physicsResult.blocksDestroyed.length,
+      };
+
+      // Create particles
+      for (const block of physicsResult.blocksDestroyed) {
+        const canvasPos = gridToCanvas(block.x, block.y);
+        newState.particles = [
+          ...newState.particles,
+          ...createBlockParticles(canvasPos.x + GRID_CONFIG.cellSize / 2, canvasPos.y + GRID_CONFIG.cellSize / 2),
+        ];
+      }
+    }
+  }
+
+  // Respawn ball if lost
+  if (newState.balls.length === 0) {
+    const paddleCenter = getPaddleCenter(newState.paddle);
+    newState.balls = [createBall(paddleCenter.x, newState.paddle.y - 20)];
+    newState.ballLaunched = false;
+  }
+
+  // Update human Tetris
+  if (tetrisInput && newState.humanTetris) {
+    const tetrisResult = updateHumanTetris(
+      newState.humanTetris,
+      newState.grid,
+      tetrisInput,
+      deltaTime,
+      newState.stats.level
+    );
+
+    newState.humanTetris = tetrisResult.state;
+    newState.grid = tetrisResult.grid;
+
+    if (tetrisResult.piecePlaced) {
+      // Check for completed lines
+      const lineResult = processLineCompletion(newState.grid, newState.hasShield);
+      newState.grid = lineResult.grid;
+
+      if (lineResult.linesCompleted > 0) {
+        // Human scored!
+        newState.stats = {
+          ...newState.stats,
+          score: newState.stats.score + 100 * lineResult.linesCompleted * newState.stats.level,
+        };
+      }
+
+      // Check if blocks reached danger zone
+      if (lineResult.blocksInDangerZone) {
+        newState.gameState = 'GAME_OVER';
+        newState.gameOverReason = 'BLOCKS_REACHED_BOTTOM';
+        return newState;
+      }
+
+      // Check if can spawn new piece
+      if (newState.humanTetris.currentPiece && !canSpawnPiece(newState.grid, newState.humanTetris.currentPiece)) {
+        newState.gameState = 'GAME_OVER';
+        newState.gameOverReason = 'BLOCKS_REACHED_BOTTOM';
+        return newState;
+      }
+    }
+  }
+
+  // Update line warnings
+  newState.grid = updateLineWarnings(newState.grid);
+
+  // Update particles
+  newState.particles = updateParticles(newState.particles, deltaTime);
+
+  // Check level up
+  newState = checkLevelUpAndProgress(newState);
+
+  return newState;
+}
+
+function updateTwoPlayerMode(
+  state: GameEngineState,
+  deltaTime: number,
+  mouseX: number | null,
+  leftPressed: boolean,
+  rightPressed: boolean,
+  tetrisInput?: TetrisInput
+): GameEngineState {
+  if (!state.humanTetris) return state;
+
+  let newState = { ...state };
+  const diffConfig = getDifficultyConfig(state.stats.level);
+
+  // Update survival time
+  newState.stats = {
+    ...newState.stats,
+    survivalTime: newState.stats.survivalTime + deltaTime,
+  };
+
+  // Player 2 controls paddle (arrow keys handled by rightPressed/leftPressed)
+  newState.paddle = updatePaddleWithInput(
+    newState.paddle,
+    deltaTime,
+    leftPressed,
+    rightPressed,
+    mouseX
+  );
+
+  // If ball not launched, keep it on paddle
+  if (!newState.ballLaunched && newState.balls.length > 0) {
+    const paddleCenter = getPaddleCenter(newState.paddle);
+    newState.balls = [
+      {
+        ...newState.balls[0],
+        x: paddleCenter.x,
+        y: newState.paddle.y - 20,
+      },
+      ...newState.balls.slice(1),
+    ];
+  }
+
+  // Update physics
+  if (newState.ballLaunched) {
+    const physicsResult = updatePhysics(
+      newState.balls,
+      newState.grid,
+      newState.paddle,
+      deltaTime,
+      diffConfig.ballSpeed
+    );
+
+    newState.balls = physicsResult.balls;
+    newState.grid = physicsResult.grid;
+
+    // Handle lost balls
+    if (physicsResult.lostBalls.length > 0) {
+      newState.stats = {
+        ...newState.stats,
+        lives: newState.stats.lives - physicsResult.lostBalls.length,
+      };
+    }
+
+    // Handle destroyed blocks
+    if (physicsResult.blocksDestroyed.length > 0) {
+      newState.stats = {
+        ...newState.stats,
+        blocksDestroyed: newState.stats.blocksDestroyed + physicsResult.blocksDestroyed.length,
+      };
+
+      for (const block of physicsResult.blocksDestroyed) {
+        const canvasPos = gridToCanvas(block.x, block.y);
+        newState.particles = [
+          ...newState.particles,
+          ...createBlockParticles(canvasPos.x + GRID_CONFIG.cellSize / 2, canvasPos.y + GRID_CONFIG.cellSize / 2),
+        ];
+      }
+    }
+  }
+
+  // Check for all balls lost
+  if (newState.balls.length === 0) {
+    if (newState.stats.lives > 0) {
+      const paddleCenter = getPaddleCenter(newState.paddle);
+      newState.balls = [createBall(paddleCenter.x, newState.paddle.y - 20)];
+      newState.ballLaunched = false;
+    } else {
+      // Arkanoid player loses
+      newState.gameState = 'GAME_OVER';
+      newState.gameOverReason = 'NO_BALLS';
+      return newState;
+    }
+  }
+
+  // Player 1 controls Tetris
+  if (tetrisInput && newState.humanTetris) {
+    const tetrisResult = updateHumanTetris(
+      newState.humanTetris,
+      newState.grid,
+      tetrisInput,
+      deltaTime,
+      newState.stats.level
+    );
+
+    newState.humanTetris = tetrisResult.state;
+    newState.grid = tetrisResult.grid;
+
+    if (tetrisResult.piecePlaced) {
+      // Check for completed lines
+      const lineResult = processLineCompletion(newState.grid, newState.hasShield);
+      newState.grid = lineResult.grid;
+
+      if (lineResult.linesCompleted > 0) {
+        // Tetris player scored!
+        if (newState.humanTetris) {
+          newState.humanTetris = {
+            ...newState.humanTetris,
+            score: newState.humanTetris.score + 100 * lineResult.linesCompleted,
+          };
+        }
+      }
+
+      // Check if blocks reached danger zone
+      if (lineResult.blocksInDangerZone) {
+        // Tetris player loses
+        newState.gameState = 'GAME_OVER';
+        newState.gameOverReason = 'BLOCKS_REACHED_BOTTOM';
+        return newState;
+      }
+
+      // Check if can spawn new piece
+      if (newState.humanTetris.currentPiece && !canSpawnPiece(newState.grid, newState.humanTetris.currentPiece)) {
+        newState.gameState = 'GAME_OVER';
+        newState.gameOverReason = 'BLOCKS_REACHED_BOTTOM';
+        return newState;
+      }
+    }
+  }
+
+  // Update line warnings
+  newState.grid = updateLineWarnings(newState.grid);
+
+  // Update particles
+  newState.particles = updateParticles(newState.particles, deltaTime);
+
+  // Check level up
+  newState = checkLevelUpAndProgress(newState);
+
+  return newState;
+}
+
+function updatePowerUpsAndParticles(
+  state: GameEngineState,
+  deltaTime: number,
+  diffConfig: ReturnType<typeof getDifficultyConfig>
+): GameEngineState {
+  let newState = { ...state };
+
   // Update power-ups
   newState.powerUps = newState.powerUps
     .map(p => updatePowerUp(p, deltaTime))
-    .filter(p => p.y < CANVAS_CONFIG.height + 50); // Remove off-screen power-ups
+    .filter(p => p.y < CANVAS_CONFIG.height + 50);
 
   // Check power-up collection
   const collectedPowerUps: PowerUp[] = [];
@@ -319,7 +696,7 @@ export function updateGame(
     };
   }
 
-  // Update active power-ups (check for expiration)
+  // Update active power-ups
   const powerUpUpdate = updateActivePowerUps(
     newState.activePowerUps,
     newState.balls,
@@ -336,7 +713,21 @@ export function updateGame(
     newState.robot = unfreezeRobot(newState.robot);
   }
 
-  // Check for level up
+  // Update particles
+  newState.particles = updateParticles(newState.particles, deltaTime);
+
+  // Add survival score
+  newState.stats = {
+    ...newState.stats,
+    score: newState.stats.score + Math.floor(SCORING.survivalPerSecond * deltaTime),
+  };
+
+  return newState;
+}
+
+function checkLevelUpAndProgress(state: GameEngineState): GameEngineState {
+  let newState = { ...state };
+
   const levelProgress = calculateLevelProgress(
     newState.stats.level,
     newState.stats.survivalTime,
@@ -349,22 +740,18 @@ export function updateGame(
       const newDiffConfig = getDifficultyConfig(newLevel);
       newState.stats = { ...newState.stats, level: newLevel };
 
-      // Update paddle width for new level (only if not enlarged by power-up)
+      // Update paddle width for new level
       const hasLargePaddle = newState.activePowerUps.some(p => p.type === 'LARGE_PADDLE');
       if (!hasLargePaddle) {
         newState.paddle = { ...newState.paddle, width: newDiffConfig.paddleWidth };
       }
+
+      // Update AI paddle if in reversed mode
+      if (newState.aiPaddle) {
+        newState.aiPaddle = createAIPaddleState(newLevel);
+      }
     }
   }
-
-  // Update particles
-  newState.particles = updateParticles(newState.particles, deltaTime);
-
-  // Add survival score
-  newState.stats = {
-    ...newState.stats,
-    score: newState.stats.score + Math.floor(SCORING.survivalPerSecond * deltaTime),
-  };
 
   return newState;
 }

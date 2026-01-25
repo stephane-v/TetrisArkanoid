@@ -5,7 +5,8 @@ import { gridToCanvas } from '../game/utils/collision';
 import { getBlockDamageColor } from '../game/entities/Block';
 import { getTetrominoBlocks } from '../game/utils/tetrominos';
 import { getPowerUpColor, getPowerUpIcon } from '../game/systems/PowerUps';
-import type { GameGrid, RobotState, PowerUp, Paddle, Ball, Particle } from '../types/game.types';
+import { getGhostPieceY } from '../game/systems/HumanTetris';
+import type { GameGrid, RobotState, PowerUp, Paddle, Ball, Particle, HumanTetrisState, Tetromino } from '../types/game.types';
 
 interface CanvasProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -34,21 +35,31 @@ export const Canvas: React.FC<CanvasProps> = ({ canvasRef }) => {
     // Draw blocks
     drawBlocks(ctx, gameState.grid);
 
-    // Draw robot's current placement (ghost piece)
-    if (gameState.robot.targetPlacement && !gameState.robot.isThinking) {
+    // Draw human tetris piece (for REVERSED and TWO_PLAYER modes)
+    if (gameState.humanTetris && gameState.humanTetris.currentPiece) {
+      drawHumanTetrisPiece(ctx, gameState.humanTetris, gameState.grid);
+    }
+
+    // Draw robot's current placement (ghost piece) - only in CLASSIC mode
+    if (gameState.gameMode === 'CLASSIC' && gameState.robot.targetPlacement && !gameState.robot.isThinking) {
       drawGhostPiece(ctx, gameState.robot);
     }
 
-    // Draw robot's thinking indicator
-    if (gameState.robot.isThinking && gameState.robot.currentPiece) {
+    // Draw robot's thinking indicator - only in CLASSIC mode
+    if (gameState.gameMode === 'CLASSIC' && gameState.robot.isThinking && gameState.robot.currentPiece) {
       drawThinkingPiece(ctx, gameState.robot);
+    }
+
+    // Draw next piece preview for human tetris
+    if (gameState.humanTetris && gameState.humanTetris.nextPieces.length > 0) {
+      drawNextPiecePreview(ctx, gameState.humanTetris.nextPieces[0]);
     }
 
     // Draw power-ups
     drawPowerUps(ctx, gameState.powerUps);
 
     // Draw paddle
-    drawPaddle(ctx, gameState.paddle);
+    drawPaddle(ctx, gameState.paddle, gameState.gameMode === 'REVERSED');
 
     // Draw balls
     gameState.balls.forEach((ball) => {
@@ -58,8 +69,8 @@ export const Canvas: React.FC<CanvasProps> = ({ canvasRef }) => {
     // Draw particles
     drawParticles(ctx, gameState.particles);
 
-    // Draw launch indicator if ball not launched
-    if (!gameState.ballLaunched && gameState.balls.length > 0) {
+    // Draw launch indicator if ball not launched (not in REVERSED mode where AI launches)
+    if (!gameState.ballLaunched && gameState.balls.length > 0 && gameState.gameMode !== 'REVERSED') {
       drawLaunchIndicator(ctx, gameState.balls[0]);
     }
   }, [canvasRef, gameState]);
@@ -213,6 +224,71 @@ function drawBlocks(ctx: CanvasRenderingContext2D, grid: GameGrid) {
   }
 }
 
+function drawHumanTetrisPiece(ctx: CanvasRenderingContext2D, humanTetris: HumanTetrisState, grid: GameGrid) {
+  if (!humanTetris.currentPiece) return;
+
+  const { cellSize } = GRID_CONFIG;
+  const { currentPiece, currentX, currentY } = humanTetris;
+
+  // Draw ghost piece (where the piece will land)
+  const ghostY = getGhostPieceY(grid, currentPiece, currentX, currentY);
+  const ghostBlocks = getTetrominoBlocks(currentPiece, currentX, ghostY);
+
+  ctx.globalAlpha = 0.3;
+  for (const block of ghostBlocks) {
+    const canvasPos = gridToCanvas(block.x, block.y);
+    ctx.fillStyle = currentPiece.color;
+    ctx.fillRect(canvasPos.x + 2, canvasPos.y + 2, cellSize - 4, cellSize - 4);
+    ctx.strokeStyle = currentPiece.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(canvasPos.x + 2, canvasPos.y + 2, cellSize - 4, cellSize - 4);
+  }
+  ctx.globalAlpha = 1;
+
+  // Draw current piece
+  const blocks = getTetrominoBlocks(currentPiece, currentX, currentY);
+
+  for (const block of blocks) {
+    const canvasPos = gridToCanvas(block.x, block.y);
+
+    ctx.fillStyle = currentPiece.color;
+    ctx.fillRect(canvasPos.x + 2, canvasPos.y + 2, cellSize - 4, cellSize - 4);
+
+    // Highlight effect
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(canvasPos.x + 2, canvasPos.y + 2, cellSize - 4, cellSize - 4);
+  }
+}
+
+function drawNextPiecePreview(ctx: CanvasRenderingContext2D, nextPiece: Tetromino) {
+  // Draw next piece preview at top right
+  const previewX = CANVAS_CONFIG.width - 80;
+  const previewY = 60;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(previewX - 10, previewY - 30, 70, 80);
+
+  ctx.fillStyle = '#a855f7'; // Purple for human tetris
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('NEXT', previewX + 25, previewY - 15);
+
+  // Draw the piece
+  const blocks = getTetrominoBlocks(nextPiece, 0, 0);
+  const pieceSize = 16;
+
+  for (const block of blocks) {
+    ctx.fillStyle = nextPiece.color;
+    ctx.fillRect(
+      previewX + block.x * pieceSize,
+      previewY + block.y * pieceSize,
+      pieceSize - 2,
+      pieceSize - 2
+    );
+  }
+}
+
 function drawGhostPiece(ctx: CanvasRenderingContext2D, robot: RobotState) {
   if (!robot.targetPlacement) return;
 
@@ -306,18 +382,29 @@ function drawPowerUps(ctx: CanvasRenderingContext2D, powerUps: PowerUp[]) {
   }
 }
 
-function drawPaddle(ctx: CanvasRenderingContext2D, paddle: Paddle) {
+function drawPaddle(ctx: CanvasRenderingContext2D, paddle: Paddle, isAI: boolean = false) {
+  // Different color for AI paddle
+  const paddleColor = isAI ? '#ff6b6b' : COLORS.paddle;
+
   // Glow effect
-  ctx.shadowColor = COLORS.paddle;
+  ctx.shadowColor = paddleColor;
   ctx.shadowBlur = 10;
 
   // Main paddle
-  ctx.fillStyle = COLORS.paddle;
+  ctx.fillStyle = paddleColor;
   ctx.beginPath();
   ctx.roundRect(paddle.x, paddle.y, paddle.width, paddle.height, 4);
   ctx.fill();
 
   ctx.shadowBlur = 0;
+
+  // AI indicator
+  if (isAI) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('AI', paddle.x + paddle.width / 2, paddle.y + paddle.height / 2 + 3);
+  }
 
   // Highlight
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
@@ -366,6 +453,6 @@ function drawLaunchIndicator(ctx: CanvasRenderingContext2D, ball: Ball) {
   ctx.fillStyle = '#ffffff';
   ctx.font = '14px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('SPACE or CLICK to launch', ball.x, ball.y - 30);
+  ctx.fillText('SPACE ou CLIC pour lancer', ball.x, ball.y - 30);
   ctx.globalAlpha = 1;
 }

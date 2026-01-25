@@ -10,6 +10,7 @@ import { PauseMenu } from './UI/PauseMenu';
 import { GameOver } from './UI/GameOver';
 import { HUD } from './UI/HUD';
 import { RobotStatus } from './UI/RobotStatus';
+import type { GameMode } from '../types/game.types';
 
 export const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -19,8 +20,10 @@ export const Game = () => {
 
   const {
     gameState,
+    gameMode,
     stats,
     robot,
+    humanTetris,
     hasShield,
     activePowerUps,
     gameOverReason,
@@ -65,9 +68,17 @@ export const Game = () => {
       sound.powerUp();
     }
 
-    // Robot completed a line
-    if (robot.linesCompleted > prevRobotLines) {
+    // Robot completed a line (only in classic mode)
+    if (gameMode === 'CLASSIC' && robot.linesCompleted > prevRobotLines) {
       sound.lineComplete();
+    }
+
+    // Human completed a line (in reversed or 2-player modes)
+    if ((gameMode === 'REVERSED' || gameMode === 'TWO_PLAYER') && humanTetris) {
+      const prevHumanLines = prevStatsRef.current.linesPreventedCount;
+      if (humanTetris.linesCompleted > prevHumanLines) {
+        sound.lineComplete();
+      }
     }
 
     // Level up
@@ -94,21 +105,22 @@ export const Game = () => {
     prevPowerUpsRef.current = powerUps.length;
     prevRobotLinesRef.current = robot.linesCompleted;
     prevGameStateRef.current = gameState;
-  }, [stats, balls.length, powerUps.length, robot.linesCompleted, gameState, sound]);
+  }, [stats, balls.length, powerUps.length, robot.linesCompleted, humanTetris, gameState, gameMode, sound]);
 
   const handleSpace = useCallback(() => {
     if (gameState === 'START') {
-      start();
+      // Don't start here, let StartScreen handle mode selection
     } else if (gameState === 'PAUSED') {
       resume();
     } else if (gameState === 'GAME_OVER') {
       reset();
-      start();
-    } else if (gameState === 'PLAYING' && !ballLaunched) {
+      // Will need to select mode again
+    } else if (gameState === 'PLAYING' && !ballLaunched && gameMode !== 'REVERSED') {
+      // In reversed mode, AI handles ball launch
       sound.launch();
       launchBall();
     }
-  }, [gameState, ballLaunched, start, resume, reset, launchBall, sound]);
+  }, [gameState, gameMode, ballLaunched, resume, reset, launchBall, sound]);
 
   const handlePause = useCallback(() => {
     if (gameState === 'PLAYING') {
@@ -122,18 +134,27 @@ export const Game = () => {
     handlePause();
   }, [handlePause]);
 
+  // Use separate controls for 2-player mode
+  const useSeparateControls = gameMode === 'TWO_PLAYER';
+
   const input = useInput({
     canvasRef,
     onSpace: handleSpace,
     onEscape: handleEscape,
     onPause: handlePause,
+    useSeparateControls,
   });
 
   const handleUpdate = useCallback(
     (deltaTime: number) => {
-      update(deltaTime, input.mouseX, input.leftPressed, input.rightPressed);
+      // Pass tetris input for reversed and 2-player modes
+      const tetrisInput = (gameMode === 'REVERSED' || gameMode === 'TWO_PLAYER')
+        ? input.tetrisInput
+        : undefined;
+
+      update(deltaTime, input.mouseX, input.leftPressed, input.rightPressed, tetrisInput);
     },
-    [update, input.mouseX, input.leftPressed, input.rightPressed]
+    [update, input.mouseX, input.leftPressed, input.rightPressed, input.tetrisInput, gameMode]
   );
 
   useGameLoop({
@@ -141,8 +162,8 @@ export const Game = () => {
     isRunning: gameState === 'PLAYING',
   });
 
-  const handleStart = useCallback(() => {
-    start();
+  const handleStart = useCallback((mode: GameMode) => {
+    start(mode);
   }, [start]);
 
   const handleResume = useCallback(() => {
@@ -151,8 +172,8 @@ export const Game = () => {
 
   const handleRestart = useCallback(() => {
     reset();
-    start();
-  }, [reset, start]);
+    // Go back to start screen to choose mode
+  }, [reset]);
 
   const toggleSound = useCallback(() => {
     const newEnabled = !soundEnabled;
@@ -160,14 +181,35 @@ export const Game = () => {
     sound.setEnabled(newEnabled);
   }, [soundEnabled, sound]);
 
+  // Get mode-specific title for display
+  const getModeTitle = () => {
+    switch (gameMode) {
+      case 'CLASSIC': return 'Robot vs Player';
+      case 'REVERSED': return 'Vous jouez Tetris';
+      case 'TWO_PLAYER': return 'Joueur 1 vs Joueur 2';
+      default: return '';
+    }
+  };
+
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-950 py-4">
       <div
         className="relative overflow-hidden rounded-lg shadow-2xl border border-gray-800"
         style={{ width, height: height + 60 }}
       >
-        <HUD stats={stats} hasShield={hasShield} activePowerUps={activePowerUps} />
-        <RobotStatus robot={robot} />
+        <HUD
+          stats={stats}
+          hasShield={hasShield}
+          activePowerUps={activePowerUps}
+          modeTitle={gameMode !== 'CLASSIC' ? getModeTitle() : undefined}
+          humanTetrisScore={humanTetris?.score}
+        />
+        {gameMode === 'CLASSIC' && <RobotStatus robot={robot} />}
+        {(gameMode === 'REVERSED' || gameMode === 'TWO_PLAYER') && humanTetris && (
+          <div className="absolute top-0 right-2 text-xs text-purple-400 z-10">
+            <span>Tetris: {humanTetris.linesCompleted} lignes</span>
+          </div>
+        )}
 
         <div
           className="relative"
@@ -195,8 +237,11 @@ export const Game = () => {
             <GameOver
               reason={gameOverReason}
               stats={stats}
-              robotScore={robot.score}
-              robotLines={robot.linesCompleted}
+              robotScore={gameMode === 'CLASSIC' ? robot.score : undefined}
+              robotLines={gameMode === 'CLASSIC' ? robot.linesCompleted : undefined}
+              humanTetrisScore={humanTetris?.score}
+              humanTetrisLines={humanTetris?.linesCompleted}
+              gameMode={gameMode}
               onRestart={handleRestart}
             />
           )}
@@ -204,7 +249,15 @@ export const Game = () => {
       </div>
 
       <div className="mt-4 text-gray-600 text-xs text-center">
-        <p>Move: Mouse/Touch or Arrow Keys | Launch: Space/Click | Pause: P or Escape</p>
+        {gameMode === 'CLASSIC' && (
+          <p>Déplacer: Souris/Tactile ou Flèches | Lancer: Espace/Clic | Pause: P ou Echap</p>
+        )}
+        {gameMode === 'REVERSED' && (
+          <p>Tetris: Flèches + Z/X rotation + Espace (drop) | Pause: P ou Echap</p>
+        )}
+        {gameMode === 'TWO_PLAYER' && (
+          <p>J1 Tetris: WASD+Q | J2 Arkanoid: Flèches+Espace | Pause: P</p>
+        )}
       </div>
     </div>
   );

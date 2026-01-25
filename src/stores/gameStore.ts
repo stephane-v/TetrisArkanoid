@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { GameEngineState } from '../game/Engine';
+import type { GameMode } from '../types/game.types';
+import type { TetrisInput } from '../game/systems/HumanTetris';
 import {
   createInitialState,
   startGame,
@@ -11,7 +13,7 @@ import {
 
 interface GameStore extends GameEngineState {
   // Actions
-  start: () => void;
+  start: (mode?: GameMode) => void;
   pause: () => void;
   resume: () => void;
   launchBall: () => void;
@@ -19,7 +21,8 @@ interface GameStore extends GameEngineState {
     deltaTime: number,
     mouseX: number | null,
     leftPressed: boolean,
-    rightPressed: boolean
+    rightPressed: boolean,
+    tetrisInput?: TetrisInput
   ) => void;
   reset: () => void;
 }
@@ -27,7 +30,7 @@ interface GameStore extends GameEngineState {
 export const useGameStore = create<GameStore>((set) => ({
   ...createInitialState(),
 
-  start: () => set((state) => startGame(state)),
+  start: (mode: GameMode = 'CLASSIC') => set((state) => startGame(state, mode)),
 
   pause: () => set((state) => pauseGame(state)),
 
@@ -35,8 +38,8 @@ export const useGameStore = create<GameStore>((set) => ({
 
   launchBall: () => set((state) => launchBallAction(state)),
 
-  update: (deltaTime, mouseX, leftPressed, rightPressed) =>
-    set((state) => updateGame(state, deltaTime, mouseX, leftPressed, rightPressed)),
+  update: (deltaTime, mouseX, leftPressed, rightPressed, tetrisInput) =>
+    set((state) => updateGame(state, deltaTime, mouseX, leftPressed, rightPressed, tetrisInput)),
 
   reset: () => set(createInitialState()),
 }));

@@ -126,7 +126,34 @@ export interface DifficultyConfig {
 
 export type GameOverReason = 'NO_BALLS' | 'BLOCKS_REACHED_BOTTOM' | null;
 
-export type GameState = 'START' | 'PLAYING' | 'PAUSED' | 'GAME_OVER';
+export type GameState = 'START' | 'MODE_SELECT' | 'PLAYING' | 'PAUSED' | 'GAME_OVER';
+
+// Game modes
+export type GameMode =
+  | 'CLASSIC'      // Robot plays Tetris, Human plays Arkanoid
+  | 'REVERSED'     // Human plays Tetris, Robot plays Arkanoid
+  | 'TWO_PLAYER';  // Human vs Human
+
+// Human Tetris player state (for reversed and 2-player modes)
+export interface HumanTetrisState {
+  currentPiece: Tetromino | null;
+  nextPieces: Tetromino[];
+  currentX: number;
+  currentY: number;
+  dropTimer: number;
+  dropSpeed: number;  // ms between drops
+  softDropping: boolean;
+  score: number;
+  linesCompleted: number;
+}
+
+// AI Paddle controller state (for reversed mode)
+export interface AIPaddleState {
+  targetX: number;
+  reactionTime: number;
+  accuracy: number;  // 0-1, how accurately it tracks the ball
+  predictionSkill: number;  // 0-1, how well it predicts ball trajectory
+}
 
 export interface GameStats {
   score: number;
