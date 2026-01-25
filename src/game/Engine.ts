@@ -93,8 +93,10 @@ export function createInitialState(): GameEngineState {
   };
 }
 
-export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC', difficulty: Difficulty = 'MEDIUM'): GameEngineState {
+export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC', difficulty: Difficulty = 'MEDIUM', startingLevel: number = 1): GameEngineState {
   const baseState = createInitialState();
+  const level = Math.max(1, Math.min(20, startingLevel));
+  const levelDiffConfig = getDifficultyConfig(level);
 
   // Set up mode-specific state
   let humanTetris: HumanTetrisState | null = null;
@@ -105,7 +107,7 @@ export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC', d
   }
 
   if (mode === 'REVERSED') {
-    aiPaddle = createAIPaddleState(1);
+    aiPaddle = createAIPaddleState(level);
   }
 
   return {
@@ -113,10 +115,19 @@ export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC', d
     gameState: 'PLAYING',
     gameMode: mode,
     difficulty,
+    stats: {
+      ...baseState.stats,
+      level,
+    },
+    paddle: {
+      ...baseState.paddle,
+      width: levelDiffConfig.paddleWidth,
+    },
+    robot: mode === 'REVERSED'
+      ? { ...baseState.robot, currentPiece: null }
+      : createRobotState(level),
     humanTetris,
     aiPaddle,
-    // In REVERSED mode, disable the robot
-    robot: mode === 'REVERSED' ? { ...baseState.robot, currentPiece: null } : baseState.robot,
   };
 }
 

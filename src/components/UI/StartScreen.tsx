@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import type { GameMode, Difficulty } from '../../types/game.types';
 
 interface StartScreenProps {
-  onStart: (mode: GameMode, difficulty: Difficulty) => void;
+  onStart: (mode: GameMode, difficulty: Difficulty, startingLevel: number) => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
   const [selectedMode, setSelectedMode] = useState<GameMode>('CLASSIC');
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('MEDIUM');
+  const [startingLevel, setStartingLevel] = useState<number>(1);
 
   const modes: { mode: GameMode; title: string; description: string; color: string }[] = [
     {
@@ -137,34 +138,58 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
         {getDescriptionText()}
       </div>
 
-      {/* Difficulty Selection */}
-      <div className="mb-4">
-        <p className="text-gray-400 text-xs mb-2">Difficulté (bonus):</p>
-        <div className="flex gap-2">
-          {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((diff) => {
-            const diffLabels = { EASY: 'Facile', MEDIUM: 'Normal', HARD: 'Difficile' };
-            const diffColors = { EASY: '#22c55e', MEDIUM: '#eab308', HARD: '#ef4444' };
-            return (
-              <button
-                key={diff}
-                onClick={() => setSelectedDifficulty(diff)}
-                className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                  selectedDifficulty === diff
-                    ? 'scale-105 text-black'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                }`}
-                style={selectedDifficulty === diff ? { backgroundColor: diffColors[diff] } : undefined}
-              >
-                {diffLabels[diff]}
-              </button>
-            );
-          })}
+      {/* Difficulty and Level Selection */}
+      <div className="flex gap-4 mb-4">
+        {/* Difficulty */}
+        <div>
+          <p className="text-gray-400 text-xs mb-2">Difficulté (bonus):</p>
+          <div className="flex gap-1">
+            {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((diff) => {
+              const diffLabels = { EASY: 'Facile', MEDIUM: 'Normal', HARD: 'Difficile' };
+              const diffColors = { EASY: '#22c55e', MEDIUM: '#eab308', HARD: '#ef4444' };
+              return (
+                <button
+                  key={diff}
+                  onClick={() => setSelectedDifficulty(diff)}
+                  className={`px-2 py-1 rounded text-xs font-bold transition-all ${
+                    selectedDifficulty === diff
+                      ? 'scale-105 text-black'
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  }`}
+                  style={selectedDifficulty === diff ? { backgroundColor: diffColors[diff] } : undefined}
+                >
+                  {diffLabels[diff]}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-gray-500 text-[10px] mt-1">
+            {selectedDifficulty === 'EASY' && 'Plus de bonus (25%)'}
+            {selectedDifficulty === 'MEDIUM' && 'Bonus standard (15%)'}
+            {selectedDifficulty === 'HARD' && 'Peu de bonus (5%)'}
+          </p>
         </div>
-        <p className="text-gray-500 text-[10px] mt-1">
-          {selectedDifficulty === 'EASY' && 'Plus de bonus (25%)'}
-          {selectedDifficulty === 'MEDIUM' && 'Bonus standard (15%)'}
-          {selectedDifficulty === 'HARD' && 'Peu de bonus (5%)'}
-        </p>
+
+        {/* Starting Level */}
+        <div>
+          <p className="text-gray-400 text-xs mb-2">Niveau de départ:</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setStartingLevel(Math.max(1, startingLevel - 1))}
+              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded font-bold text-lg"
+            >
+              -
+            </button>
+            <span className="w-8 text-center font-bold text-lg text-cyan-400">{startingLevel}</span>
+            <button
+              onClick={() => setStartingLevel(Math.min(20, startingLevel + 1))}
+              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded font-bold text-lg"
+            >
+              +
+            </button>
+          </div>
+          <p className="text-gray-500 text-[10px] mt-1">Max: 20</p>
+        </div>
       </div>
 
       <div className="mb-4 text-sm text-gray-400 text-center">
@@ -172,7 +197,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
       </div>
 
       <button
-        onClick={() => onStart(selectedMode, selectedDifficulty)}
+        onClick={() => onStart(selectedMode, selectedDifficulty, startingLevel)}
         className={`px-8 py-3 ${buttonColorClass} text-black font-bold rounded-lg transition-colors text-xl`}
       >
         JOUER - {selectedConfig.title.toUpperCase()}

@@ -13,7 +13,7 @@ import {
 
 interface GameStore extends GameEngineState {
   // Actions
-  start: (mode?: GameMode, difficulty?: Difficulty) => void;
+  start: (mode?: GameMode, difficulty?: Difficulty, startingLevel?: number) => void;
   pause: () => void;
   resume: () => void;
   launchBall: () => void;
@@ -30,8 +30,8 @@ interface GameStore extends GameEngineState {
 export const useGameStore = create<GameStore>((set) => ({
   ...createInitialState(),
 
-  start: (mode: GameMode = 'CLASSIC', difficulty: Difficulty = 'MEDIUM') =>
-    set((state) => startGame(state, mode, difficulty)),
+  start: (mode: GameMode = 'CLASSIC', difficulty: Difficulty = 'MEDIUM', startingLevel: number = 1) =>
+    set((state) => startGame(state, mode, difficulty, startingLevel)),
 
   pause: () => set((state) => pauseGame(state)),
 

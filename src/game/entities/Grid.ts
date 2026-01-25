@@ -348,44 +348,8 @@ export function destroyRandomLine(grid: GameGrid): GameGrid {
   };
 }
 
-// Check if a block has any same-color neighbors (inline for performance)
-function hasSameColorNeighborInBlocks(
-  blocks: (Block | null)[][],
-  x: number,
-  y: number,
-  width: number,
-  height: number
-): boolean {
-  const block = blocks[y]?.[x];
-  if (!block) return false;
-
-  const color = block.color;
-
-  // Check left
-  if (x > 0) {
-    const left = blocks[y][x - 1];
-    if (left && left.color === color) return true;
-  }
-  // Check right
-  if (x < width - 1) {
-    const right = blocks[y][x + 1];
-    if (right && right.color === color) return true;
-  }
-  // Check up
-  if (y > 0) {
-    const up = blocks[y - 1]?.[x];
-    if (up && up.color === color) return true;
-  }
-  // Check down
-  if (y < height - 1) {
-    const down = blocks[y + 1]?.[x];
-    if (down && down.color === color) return true;
-  }
-
-  return false;
-}
-
-// Apply gravity to isolated blocks (single blocks with no same-color neighbors)
+// Apply gravity to floating blocks (blocks with empty space below them)
+// Blocks fall one cell at a time until they land on something
 export function applyIsolatedBlockGravity(grid: GameGrid): GameGrid {
   const { width, height, dangerZone } = grid.config;
   const maxY = height - dangerZone;
@@ -394,7 +358,7 @@ export function applyIsolatedBlockGravity(grid: GameGrid): GameGrid {
   let newBlocks: (Block | null)[][] | null = null;
   let changed = true;
   let iterations = 0;
-  const maxIterations = 20; // Safety limit
+  const maxIterations = 30; // Safety limit
 
   while (changed && iterations < maxIterations) {
     changed = false;
@@ -403,25 +367,23 @@ export function applyIsolatedBlockGravity(grid: GameGrid): GameGrid {
     const blocks = newBlocks || grid.blocks;
 
     // Check from bottom to top (excluding danger zone and bottom row)
+    // Process bottom-up so blocks fall properly
     for (let y = maxY - 2; y >= 0; y--) {
       for (let x = 0; x < width; x++) {
         const block = blocks[y]?.[x];
         if (!block) continue;
 
-        // Check if isolated (no same-color neighbors)
-        if (!hasSameColorNeighborInBlocks(blocks, x, y, width, height)) {
-          // Check if there's empty space below
-          const belowY = y + 1;
-          if (belowY < maxY && !blocks[belowY][x]) {
-            // Lazy create newBlocks only when needed
-            if (!newBlocks) {
-              newBlocks = grid.blocks.map(row => [...row]);
-            }
-            // Move block down
-            newBlocks[belowY][x] = block;
-            newBlocks[y][x] = null;
-            changed = true;
+        // Check if there's empty space below
+        const belowY = y + 1;
+        if (belowY < maxY && !blocks[belowY][x]) {
+          // Lazy create newBlocks only when needed
+          if (!newBlocks) {
+            newBlocks = grid.blocks.map(row => [...row]);
           }
+          // Move block down
+          newBlocks[belowY][x] = block;
+          newBlocks[y][x] = null;
+          changed = true;
         }
       }
     }

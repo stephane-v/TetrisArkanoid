@@ -162,8 +162,8 @@ export const Game = () => {
     isRunning: gameState === 'PLAYING',
   });
 
-  const handleStart = useCallback((mode: GameMode, difficulty: Difficulty) => {
-    start(mode, difficulty);
+  const handleStart = useCallback((mode: GameMode, difficulty: Difficulty, startingLevel: number) => {
+    start(mode, difficulty, startingLevel);
   }, [start]);
 
   const handleResume = useCallback(() => {
