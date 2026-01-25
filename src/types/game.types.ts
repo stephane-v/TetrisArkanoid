@@ -145,6 +145,17 @@ export interface HumanTetrisState {
   softDropping: boolean;
   score: number;
   linesCompleted: number;
+  // Input tracking for edge detection (to prevent continuous triggers)
+  lastInput: {
+    left: boolean;
+    right: boolean;
+    rotateLeft: boolean;
+    rotateRight: boolean;
+    hardDrop: boolean;
+  };
+  // DAS (Delayed Auto Shift) for horizontal movement
+  dasTimer: number;
+  dasDirection: 'left' | 'right' | null;
 }
 
 // AI Paddle controller state (for reversed mode)

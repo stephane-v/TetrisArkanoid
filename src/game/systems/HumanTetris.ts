@@ -10,6 +10,10 @@ import {
 } from '../entities/Grid';
 import { GRID_CONFIG } from '../utils/constants';
 
+// DAS (Delayed Auto Shift) settings
+const DAS_DELAY = 170; // ms before auto-repeat starts
+const DAS_REPEAT = 50;  // ms between auto-repeats
+
 export function createHumanTetrisState(): HumanTetrisState {
   const bag = generateTetrominoBag();
   const firstPiece = bag[0];
@@ -24,6 +28,15 @@ export function createHumanTetrisState(): HumanTetrisState {
     softDropping: false,
     score: 0,
     linesCompleted: 0,
+    lastInput: {
+      left: false,
+      right: false,
+      rotateLeft: false,
+      rotateRight: false,
+      hardDrop: false,
+    },
+    dasTimer: 0,
+    dasDirection: null,
   };
 }
 
@@ -56,33 +69,92 @@ export function updateHumanTetris(
 
   // Store current piece in a local variable that TypeScript knows is non-null
   let currentPiece: Tetromino = state.currentPiece;
-  let newState = { ...state };
+  let newState = { ...state, lastInput: { ...state.lastInput } };
   let newGrid = grid;
   let piecePlaced = false;
   let linesCleared = 0;
+
+  const deltaMs = deltaTime * 1000;
 
   // Calculate drop speed based on level
   const baseSpeed = 1000;
   const speedMultiplier = Math.pow(0.9, level - 1);
   newState.dropSpeed = Math.max(100, baseSpeed * speedMultiplier);
 
-  // Handle horizontal movement
-  if (input.left) {
+  // Detect edge (just pressed) for each input
+  const justPressed = {
+    left: input.left && !state.lastInput.left,
+    right: input.right && !state.lastInput.right,
+    rotateLeft: input.rotateLeft && !state.lastInput.rotateLeft,
+    rotateRight: input.rotateRight && !state.lastInput.rotateRight,
+    hardDrop: input.hardDrop && !state.lastInput.hardDrop,
+  };
+
+  // Update last input state
+  newState.lastInput = {
+    left: input.left,
+    right: input.right,
+    rotateLeft: input.rotateLeft,
+    rotateRight: input.rotateRight,
+    hardDrop: input.hardDrop,
+  };
+
+  // Handle horizontal movement with DAS (Delayed Auto Shift)
+  let shouldMoveLeft = false;
+  let shouldMoveRight = false;
+
+  if (justPressed.left) {
+    shouldMoveLeft = true;
+    newState.dasTimer = 0;
+    newState.dasDirection = 'left';
+  } else if (justPressed.right) {
+    shouldMoveRight = true;
+    newState.dasTimer = 0;
+    newState.dasDirection = 'right';
+  } else if (input.left && newState.dasDirection === 'left') {
+    newState.dasTimer += deltaMs;
+    if (newState.dasTimer >= DAS_DELAY) {
+      // Auto-repeat mode
+      const repeatTime = newState.dasTimer - DAS_DELAY;
+      if (repeatTime >= DAS_REPEAT) {
+        shouldMoveLeft = true;
+        newState.dasTimer = DAS_DELAY; // Reset to start of repeat phase
+      }
+    }
+  } else if (input.right && newState.dasDirection === 'right') {
+    newState.dasTimer += deltaMs;
+    if (newState.dasTimer >= DAS_DELAY) {
+      // Auto-repeat mode
+      const repeatTime = newState.dasTimer - DAS_DELAY;
+      if (repeatTime >= DAS_REPEAT) {
+        shouldMoveRight = true;
+        newState.dasTimer = DAS_DELAY; // Reset to start of repeat phase
+      }
+    }
+  } else {
+    // No direction held or direction changed
+    if (!input.left && !input.right) {
+      newState.dasTimer = 0;
+      newState.dasDirection = null;
+    }
+  }
+
+  if (shouldMoveLeft) {
     const newX = newState.currentX - 1;
     if (canPlaceTetromino(grid, currentPiece, newX, newState.currentY)) {
       newState.currentX = newX;
     }
   }
-  if (input.right) {
+  if (shouldMoveRight) {
     const newX = newState.currentX + 1;
     if (canPlaceTetromino(grid, currentPiece, newX, newState.currentY)) {
       newState.currentX = newX;
     }
   }
 
-  // Handle rotation
-  if (input.rotateRight || input.rotateLeft) {
-    const rotated = rotateTetromino(currentPiece, input.rotateRight);
+  // Handle rotation (only on just pressed)
+  if (justPressed.rotateRight || justPressed.rotateLeft) {
+    const rotated = rotateTetromino(currentPiece, justPressed.rotateRight);
     // Try rotation at current position
     if (canPlaceTetromino(grid, rotated, newState.currentX, newState.currentY)) {
       currentPiece = rotated;
@@ -100,13 +172,15 @@ export function updateHumanTetris(
     }
   }
 
-  // Handle hard drop
-  if (input.hardDrop) {
+  // Handle hard drop (only on just pressed)
+  if (justPressed.hardDrop) {
     // Find the lowest valid position
     let dropY = newState.currentY;
     while (canPlaceTetromino(grid, currentPiece, newState.currentX, dropY + 1)) {
       dropY++;
     }
+    // Add bonus score for hard drop distance
+    newState.score += (dropY - newState.currentY) * 2;
     newState.currentY = dropY;
 
     // Place the piece immediately
@@ -117,7 +191,7 @@ export function updateHumanTetris(
     newState.softDropping = input.softDrop;
     const effectiveDropSpeed = input.softDrop ? newState.dropSpeed / 10 : newState.dropSpeed;
 
-    newState.dropTimer += deltaTime * 1000;
+    newState.dropTimer += deltaMs;
 
     if (newState.dropTimer >= effectiveDropSpeed) {
       newState.dropTimer = 0;
@@ -180,6 +254,9 @@ function getNextPiece(state: HumanTetrisState): { state: HumanTetrisState } {
       currentX: Math.floor((GRID_CONFIG.width - getTetrominoWidth(nextPiece)) / 2),
       currentY: 0,
       dropTimer: 0,
+      // Reset DAS when getting new piece
+      dasTimer: 0,
+      dasDirection: null,
     },
   };
 }
