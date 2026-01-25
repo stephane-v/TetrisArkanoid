@@ -80,11 +80,14 @@ export function updateRobot(
     if (state.thinkingTimeRemaining <= 0) {
       // Done thinking, calculate placement
       if (state.currentPiece) {
+        // Pass next piece for look-ahead if available
+        const nextPiece = state.nextPieces.length > 0 ? state.nextPieces[0] : undefined;
         state.targetPlacement = calculateBestMove(
           grid,
           state.currentPiece,
           state.config.placementSkill,
-          state.config.aggressiveness
+          state.config.aggressiveness,
+          nextPiece
         );
       }
       state.isThinking = false;
@@ -161,13 +164,52 @@ interface PlacementOption {
   score: number;
 }
 
+// Weights for evaluation - adjusted based on skill level
+interface EvaluationWeights {
+  linesClear: number;
+  holes: number;
+  height: number;
+  bumpiness: number;
+  edgeBonus: number;
+  wellBonus: number;
+  blockade: number;
+  flatness: number;
+  rowTransitions: number;
+  columnTransitions: number;
+}
+
+function getEvaluationWeights(skill: number, aggressiveness: number): EvaluationWeights {
+  // Higher skill = better weights
+  return {
+    linesClear: 1000 * aggressiveness * (1 + skill),
+    holes: -500 * (0.5 + skill * 0.5),
+    height: -10 * (0.3 + skill * 0.7),
+    bumpiness: -15 * (0.5 + skill * 0.5),
+    edgeBonus: 25 * aggressiveness,
+    wellBonus: 150 * skill,
+    blockade: -300 * skill,
+    flatness: 50 * skill,
+    rowTransitions: -10 * skill,
+    columnTransitions: -15 * skill,
+  };
+}
+
 export function calculateBestMove(
   grid: GameGrid,
   tetromino: Tetromino,
   skill: number,
-  aggressiveness: number
+  aggressiveness: number,
+  nextPiece?: Tetromino
 ): PlacementDecision {
   const options: PlacementOption[] = [];
+  const weights = getEvaluationWeights(skill, aggressiveness);
+  const currentHeight = getStackHeight(grid);
+
+  // Adjust strategy based on stack height
+  const isInDanger = currentHeight > grid.config.height - grid.config.dangerZone - 5;
+  const adjustedWeights = isInDanger
+    ? { ...weights, linesClear: weights.linesClear * 2, height: weights.height * 2 }
+    : weights;
 
   // Try all rotations
   let rotatedPiece = tetromino;
@@ -184,7 +226,15 @@ export function calculateBestMove(
       const y = findLowestPlacement(grid, rotatedPiece, x);
 
       if (canPlaceTetromino(grid, rotatedPiece, x, y)) {
-        const score = evaluatePlacement(grid, rotatedPiece, x, y, aggressiveness);
+        let score = evaluatePlacement(grid, rotatedPiece, x, y, adjustedWeights);
+
+        // Look-ahead: if skill is high enough, consider next piece
+        if (skill > 0.6 && nextPiece) {
+          const simulatedGrid = placeTetromino(grid, rotatedPiece, x, y, 1);
+          const nextBestScore = findBestScoreForPiece(simulatedGrid, nextPiece, adjustedWeights);
+          score += nextBestScore * 0.3 * skill; // Weight future moves less
+        }
+
         options.push({
           x,
           y,
@@ -212,7 +262,7 @@ export function calculateBestMove(
   // Based on skill, choose from top options
   // skill = 1.0 -> always best
   // skill = 0.0 -> random from all options
-  const choiceRange = Math.max(1, Math.floor(options.length * (1 - skill)));
+  const choiceRange = Math.max(1, Math.floor(options.length * (1 - skill * skill))); // Quadratic for sharper skill curve
   const choiceIndex = Math.floor(Math.random() * choiceRange);
   const chosen = options[choiceIndex];
 
@@ -224,12 +274,39 @@ export function calculateBestMove(
   };
 }
 
+// Find the best score for a piece without returning the full option
+function findBestScoreForPiece(grid: GameGrid, tetromino: Tetromino, weights: EvaluationWeights): number {
+  let bestScore = -Infinity;
+
+  let rotatedPiece = tetromino;
+  for (let rotation = 0; rotation < 4; rotation++) {
+    if (rotation > 0) {
+      rotatedPiece = rotateTetromino(rotatedPiece);
+    }
+
+    const pieceWidth = getTetrominoWidth(rotatedPiece);
+
+    for (let x = 0; x <= grid.config.width - pieceWidth; x++) {
+      const y = findLowestPlacement(grid, rotatedPiece, x);
+
+      if (canPlaceTetromino(grid, rotatedPiece, x, y)) {
+        const score = evaluatePlacement(grid, rotatedPiece, x, y, weights);
+        if (score > bestScore) {
+          bestScore = score;
+        }
+      }
+    }
+  }
+
+  return bestScore === -Infinity ? 0 : bestScore;
+}
+
 function evaluatePlacement(
   grid: GameGrid,
   tetromino: Tetromino,
   x: number,
   y: number,
-  aggressiveness: number
+  weights: EvaluationWeights
 ): number {
   // Simulate placing the piece
   const simulatedGrid = placeTetromino(grid, tetromino, x, y, 1);
@@ -238,20 +315,51 @@ function evaluatePlacement(
 
   // Count completed lines (big reward)
   const completedLines = countCompletedLines(simulatedGrid);
-  score += completedLines * 1000 * aggressiveness;
+  score += completedLines * weights.linesClear;
+
+  // Extra bonus for multiple lines (Tetris = 4 lines is very valuable)
+  if (completedLines >= 4) {
+    score += 2000;
+  } else if (completedLines >= 2) {
+    score += 500 * completedLines;
+  }
 
   // Penalize holes
   const holes = countHoles(simulatedGrid);
   const originalHoles = countHoles(grid);
-  score -= (holes - originalHoles) * 500;
+  const newHoles = holes - originalHoles;
+  score += newHoles * weights.holes;
+
+  // Penalize covered holes (holes with blocks above them)
+  const coveredHoles = countCoveredHoles(simulatedGrid);
+  score += coveredHoles * weights.blockade;
 
   // Penalize height
   const height = getStackHeight(simulatedGrid);
-  score -= height * 10;
+  score += height * weights.height;
 
   // Reward placing near edges (harder for player to reach)
-  const centerDistance = Math.abs(x + getTetrominoWidth(tetromino) / 2 - grid.config.width / 2);
-  score += centerDistance * 20;
+  const pieceWidth = getTetrominoWidth(tetromino);
+  const centerDistance = Math.abs(x + pieceWidth / 2 - grid.config.width / 2);
+  score += centerDistance * weights.edgeBonus;
+
+  // Penalize bumpiness (height differences between columns)
+  const bumpiness = calculateBumpiness(simulatedGrid);
+  score += bumpiness * weights.bumpiness;
+
+  // Reward creating wells (single-column gaps for I pieces)
+  const wellScore = evaluateWells(simulatedGrid);
+  score += wellScore * weights.wellBonus;
+
+  // Reward flat surfaces
+  const flatness = calculateFlatness(simulatedGrid);
+  score += flatness * weights.flatness;
+
+  // Penalize row and column transitions (indicators of holes and gaps)
+  const rowTransitions = countRowTransitions(simulatedGrid);
+  const colTransitions = countColumnTransitions(simulatedGrid);
+  score += rowTransitions * weights.rowTransitions;
+  score += colTransitions * weights.columnTransitions;
 
   // Bonus for completing lines that are already mostly filled
   for (let row = 0; row < grid.config.height - grid.config.dangerZone; row++) {
@@ -261,15 +369,14 @@ function evaluatePlacement(
       const blocks = getTetrominoBlocks(tetromino, x, y);
       for (const block of blocks) {
         if (block.y === row) {
-          score += 300 * aggressiveness;
+          score += 300;
         }
       }
     }
   }
 
-  // Penalize bumpiness (height differences between columns)
-  const bumpiness = calculateBumpiness(simulatedGrid);
-  score -= bumpiness * 15;
+  // Bonus for placing piece low (good for building)
+  score += y * 5;
 
   return score;
 }
@@ -284,20 +391,27 @@ function countCompletedLines(grid: GameGrid): number {
   return count;
 }
 
-function calculateBumpiness(grid: GameGrid): number {
+// Get column heights for reuse
+function getColumnHeights(grid: GameGrid): number[] {
   const heights: number[] = [];
+  const maxY = grid.config.height - grid.config.dangerZone;
 
-  // Calculate height of each column
   for (let x = 0; x < grid.config.width; x++) {
     let height = 0;
-    for (let y = 0; y < grid.config.height - grid.config.dangerZone; y++) {
+    for (let y = 0; y < maxY; y++) {
       if (grid.blocks[y]?.[x]) {
-        height = grid.config.height - grid.config.dangerZone - y;
+        height = maxY - y;
         break;
       }
     }
     heights.push(height);
   }
+
+  return heights;
+}
+
+function calculateBumpiness(grid: GameGrid): number {
+  const heights = getColumnHeights(grid);
 
   // Sum of absolute differences between adjacent columns
   let bumpiness = 0;
@@ -306,6 +420,113 @@ function calculateBumpiness(grid: GameGrid): number {
   }
 
   return bumpiness;
+}
+
+// Count holes that have blocks above them (very bad)
+function countCoveredHoles(grid: GameGrid): number {
+  let coveredHoles = 0;
+  const maxY = grid.config.height - grid.config.dangerZone;
+
+  for (let x = 0; x < grid.config.width; x++) {
+    let blocksAbove = 0;
+    for (let y = 0; y < maxY; y++) {
+      if (grid.blocks[y]?.[x]) {
+        blocksAbove++;
+      } else if (blocksAbove > 0) {
+        // This is a hole with blocks above it
+        coveredHoles += blocksAbove; // Weight by how many blocks are above
+      }
+    }
+  }
+
+  return coveredHoles;
+}
+
+// Evaluate wells (single-column gaps that are good for I pieces)
+function evaluateWells(grid: GameGrid): number {
+  const heights = getColumnHeights(grid);
+  let wellScore = 0;
+
+  for (let x = 0; x < grid.config.width; x++) {
+    const leftHeight = x > 0 ? heights[x - 1] : 999;
+    const rightHeight = x < grid.config.width - 1 ? heights[x + 1] : 999;
+    const currentHeight = heights[x];
+
+    // A well is when both neighbors are higher
+    if (leftHeight > currentHeight && rightHeight > currentHeight) {
+      const wellDepth = Math.min(leftHeight, rightHeight) - currentHeight;
+      // Good wells are 1-4 deep (for I piece), bad if too deep
+      if (wellDepth >= 1 && wellDepth <= 4) {
+        wellScore += wellDepth;
+      } else if (wellDepth > 4) {
+        wellScore -= wellDepth - 4; // Penalize too deep wells
+      }
+    }
+  }
+
+  return wellScore;
+}
+
+// Calculate flatness (reward flat surfaces)
+function calculateFlatness(grid: GameGrid): number {
+  const heights = getColumnHeights(grid);
+  let flatness = 0;
+
+  // Count consecutive columns with same height
+  for (let i = 0; i < heights.length - 1; i++) {
+    if (heights[i] === heights[i + 1]) {
+      flatness++;
+    }
+  }
+
+  return flatness;
+}
+
+// Count row transitions (empty to filled or filled to empty in a row)
+function countRowTransitions(grid: GameGrid): number {
+  let transitions = 0;
+  const maxY = grid.config.height - grid.config.dangerZone;
+
+  for (let y = 0; y < maxY; y++) {
+    // Count transitions including boundaries
+    let lastFilled = true; // Treat left boundary as filled
+    for (let x = 0; x < grid.config.width; x++) {
+      const filled = !!grid.blocks[y]?.[x];
+      if (filled !== lastFilled) {
+        transitions++;
+      }
+      lastFilled = filled;
+    }
+    // Right boundary
+    if (!lastFilled) {
+      transitions++;
+    }
+  }
+
+  return transitions;
+}
+
+// Count column transitions (empty to filled or filled to empty in a column)
+function countColumnTransitions(grid: GameGrid): number {
+  let transitions = 0;
+  const maxY = grid.config.height - grid.config.dangerZone;
+
+  for (let x = 0; x < grid.config.width; x++) {
+    let lastFilled = true; // Treat top as filled
+    for (let y = 0; y < maxY; y++) {
+      const filled = !!grid.blocks[y]?.[x];
+      if (filled !== lastFilled) {
+        transitions++;
+      }
+      lastFilled = filled;
+    }
+    // Bottom boundary - if last cell was empty, that's a transition
+    if (!lastFilled) {
+      transitions++;
+    }
+  }
+
+  return transitions;
 }
 
 export function freezeRobot(state: RobotState): RobotState {
