@@ -348,6 +348,70 @@ export function destroyRandomLine(grid: GameGrid): GameGrid {
   };
 }
 
+// Check if a block has any same-color neighbors (horizontally or vertically adjacent)
+function hasSameColorNeighbor(grid: GameGrid, x: number, y: number): boolean {
+  const block = grid.blocks[y]?.[x];
+  if (!block) return false;
+
+  const color = block.color;
+
+  // Check all 4 adjacent cells (up, down, left, right)
+  const neighbors = [
+    { nx: x - 1, ny: y },     // left
+    { nx: x + 1, ny: y },     // right
+    { nx: x, ny: y - 1 },     // up
+    { nx: x, ny: y + 1 },     // down
+  ];
+
+  for (const { nx, ny } of neighbors) {
+    if (nx >= 0 && nx < grid.config.width && ny >= 0 && ny < grid.config.height) {
+      const neighbor = grid.blocks[ny]?.[nx];
+      if (neighbor && neighbor.color === color) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Apply gravity to isolated blocks (single blocks with no same-color neighbors)
+export function applyIsolatedBlockGravity(grid: GameGrid): GameGrid {
+  let newBlocks = grid.blocks.map(row => [...row]);
+  let changed = true;
+
+  // Keep applying gravity until no more blocks can fall
+  while (changed) {
+    changed = false;
+
+    // Check from bottom to top (excluding danger zone and bottom row)
+    for (let y = grid.config.height - grid.config.dangerZone - 2; y >= 0; y--) {
+      for (let x = 0; x < grid.config.width; x++) {
+        const block = newBlocks[y]?.[x];
+        if (!block) continue;
+
+        // Check if isolated (no same-color neighbors)
+        const tempGrid = { ...grid, blocks: newBlocks };
+        if (!hasSameColorNeighbor(tempGrid, x, y)) {
+          // Check if there's empty space below
+          const belowY = y + 1;
+          if (belowY < grid.config.height - grid.config.dangerZone && !newBlocks[belowY][x]) {
+            // Move block down
+            newBlocks[belowY][x] = block;
+            newBlocks[y][x] = null;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    ...grid,
+    blocks: newBlocks,
+  };
+}
+
 export function getStackHeight(grid: GameGrid): number {
   for (let y = 0; y < grid.config.height - grid.config.dangerZone; y++) {
     for (let x = 0; x < grid.config.width; x++) {

@@ -15,7 +15,7 @@ import type {
   Difficulty,
 } from '../types/game.types';
 import { CANVAS_CONFIG, GRID_CONFIG, getDifficultyConfig, SCORING, COMBO_TIMEOUT, DIFFICULTY_POWERUP_CHANCE } from './utils/constants';
-import { createEmptyGrid, updateLineWarnings } from './entities/Grid';
+import { createEmptyGrid, updateLineWarnings, applyIsolatedBlockGravity } from './entities/Grid';
 import { createBall, launchBall } from './entities/Ball';
 import { createPaddle, updatePaddleWithInput, getPaddleCenter } from './entities/Paddle';
 import { updatePhysics } from './systems/Physics';
@@ -280,6 +280,9 @@ function updateClassicMode(
           ...createBlockParticles(canvasPos.x + GRID_CONFIG.cellSize / 2, canvasPos.y + GRID_CONFIG.cellSize / 2),
         ];
       }
+
+      // Apply gravity to isolated blocks (single blocks with no same-color neighbors)
+      newState.grid = applyIsolatedBlockGravity(newState.grid);
     }
 
     // Decay combo if no recent hits
@@ -432,6 +435,9 @@ function updateReversedMode(
           ...createBlockParticles(canvasPos.x + GRID_CONFIG.cellSize / 2, canvasPos.y + GRID_CONFIG.cellSize / 2),
         ];
       }
+
+      // Apply gravity to isolated blocks
+      newState.grid = applyIsolatedBlockGravity(newState.grid);
     }
   }
 
@@ -572,6 +578,9 @@ function updateTwoPlayerMode(
           ...createBlockParticles(canvasPos.x + GRID_CONFIG.cellSize / 2, canvasPos.y + GRID_CONFIG.cellSize / 2),
         ];
       }
+
+      // Apply gravity to isolated blocks
+      newState.grid = applyIsolatedBlockGravity(newState.grid);
     }
   }
 
