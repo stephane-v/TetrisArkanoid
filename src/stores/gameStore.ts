@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GameEngineState } from '../game/Engine';
-import type { GameMode } from '../types/game.types';
+import type { GameMode, Difficulty } from '../types/game.types';
 import type { TetrisInput } from '../game/systems/HumanTetris';
 import {
   createInitialState,
@@ -13,7 +13,7 @@ import {
 
 interface GameStore extends GameEngineState {
   // Actions
-  start: (mode?: GameMode) => void;
+  start: (mode?: GameMode, difficulty?: Difficulty) => void;
   pause: () => void;
   resume: () => void;
   launchBall: () => void;
@@ -30,7 +30,8 @@ interface GameStore extends GameEngineState {
 export const useGameStore = create<GameStore>((set) => ({
   ...createInitialState(),
 
-  start: (mode: GameMode = 'CLASSIC') => set((state) => startGame(state, mode)),
+  start: (mode: GameMode = 'CLASSIC', difficulty: Difficulty = 'MEDIUM') =>
+    set((state) => startGame(state, mode, difficulty)),
 
   pause: () => set((state) => pauseGame(state)),
 

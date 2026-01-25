@@ -58,8 +58,10 @@ export const Canvas: React.FC<CanvasProps> = ({ canvasRef }) => {
     // Draw power-ups
     drawPowerUps(ctx, gameState.powerUps);
 
-    // Draw paddle
-    drawPaddle(ctx, gameState.paddle, gameState.gameMode === 'REVERSED');
+    // Draw paddle with blink effect if large paddle is about to expire
+    const largePaddlePowerUp = gameState.activePowerUps.find(p => p.type === 'LARGE_PADDLE');
+    const paddleBlinkTime = largePaddlePowerUp?.remainingTime ?? null;
+    drawPaddle(ctx, gameState.paddle, gameState.gameMode === 'REVERSED', paddleBlinkTime);
 
     // Draw balls
     gameState.balls.forEach((ball) => {
@@ -382,13 +384,23 @@ function drawPowerUps(ctx: CanvasRenderingContext2D, powerUps: PowerUp[]) {
   }
 }
 
-function drawPaddle(ctx: CanvasRenderingContext2D, paddle: Paddle, isAI: boolean = false) {
+function drawPaddle(ctx: CanvasRenderingContext2D, paddle: Paddle, isAI: boolean = false, blinkTimeRemaining: number | null = null) {
   // Different color for AI paddle
-  const paddleColor = isAI ? '#ff6b6b' : COLORS.paddle;
+  let paddleColor = isAI ? '#ff6b6b' : COLORS.paddle;
+
+  // Blink effect when large paddle power-up is about to expire (last 3 seconds)
+  let shouldBlink = false;
+  if (blinkTimeRemaining !== null && blinkTimeRemaining < 3000) {
+    // Fast blink: toggle every 100ms
+    shouldBlink = Math.floor(Date.now() / 100) % 2 === 0;
+    if (shouldBlink) {
+      paddleColor = '#ff4444'; // Red flash
+    }
+  }
 
   // Glow effect
   ctx.shadowColor = paddleColor;
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = shouldBlink ? 15 : 10;
 
   // Main paddle
   ctx.fillStyle = paddleColor;

@@ -198,9 +198,16 @@ export const LEVEL_UP_BLOCKS_DESTROYED = 30; // blocks per level
 
 // Power-up configuration
 export const POWERUP_CONFIG = {
-  dropChance: 0.15,
+  dropChance: 0.15,  // Default (MEDIUM)
   fallSpeed: 100,
   size: 20,
+};
+
+// Difficulty-based power-up drop chances
+export const DIFFICULTY_POWERUP_CHANCE: Record<string, number> = {
+  EASY: 0.25,    // 25% drop chance - lots of power-ups
+  MEDIUM: 0.15,  // 15% drop chance - balanced
+  HARD: 0.05,    // 5% drop chance - very few power-ups
 };
 
 // Colors

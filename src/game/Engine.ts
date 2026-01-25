@@ -12,8 +12,9 @@ import type {
   GameMode,
   HumanTetrisState,
   AIPaddleState,
+  Difficulty,
 } from '../types/game.types';
-import { CANVAS_CONFIG, GRID_CONFIG, getDifficultyConfig, SCORING, COMBO_TIMEOUT } from './utils/constants';
+import { CANVAS_CONFIG, GRID_CONFIG, getDifficultyConfig, SCORING, COMBO_TIMEOUT, DIFFICULTY_POWERUP_CHANCE } from './utils/constants';
 import { createEmptyGrid, updateLineWarnings } from './entities/Grid';
 import { createBall, launchBall } from './entities/Ball';
 import { createPaddle, updatePaddleWithInput, getPaddleCenter } from './entities/Paddle';
@@ -40,6 +41,7 @@ import { createAIPaddleState, updateAIPaddle } from './systems/AIPaddle';
 export interface GameEngineState {
   gameState: GameState;
   gameMode: GameMode;
+  difficulty: Difficulty;
   balls: Ball[];
   paddle: Paddle;
   grid: GameGrid;
@@ -64,6 +66,7 @@ export function createInitialState(): GameEngineState {
   return {
     gameState: 'START',
     gameMode: 'CLASSIC',
+    difficulty: 'MEDIUM',
     balls: [createBall(paddleCenter.x, paddle.y - 20)],
     paddle,
     grid: createEmptyGrid(),
@@ -90,7 +93,7 @@ export function createInitialState(): GameEngineState {
   };
 }
 
-export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC'): GameEngineState {
+export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC', difficulty: Difficulty = 'MEDIUM'): GameEngineState {
   const baseState = createInitialState();
 
   // Set up mode-specific state
@@ -109,6 +112,7 @@ export function startGame(_state: GameEngineState, mode: GameMode = 'CLASSIC'): 
     ...baseState,
     gameState: 'PLAYING',
     gameMode: mode,
+    difficulty,
     humanTetris,
     aiPaddle,
     // In REVERSED mode, disable the robot
@@ -258,11 +262,13 @@ function updateClassicMode(
       };
 
       // Spawn power-ups from destroyed blocks
+      const powerUpDropChance = DIFFICULTY_POWERUP_CHANCE[newState.difficulty];
       for (const block of physicsResult.blocksDestroyed) {
         const canvasPos = gridToCanvas(block.x, block.y);
         const powerUp = maybeSpawnPowerUp(
           canvasPos.x + GRID_CONFIG.cellSize / 2,
-          canvasPos.y + GRID_CONFIG.cellSize / 2
+          canvasPos.y + GRID_CONFIG.cellSize / 2,
+          powerUpDropChance
         );
         if (powerUp) {
           newState.powerUps = [...newState.powerUps, powerUp];

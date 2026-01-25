@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import type { GameMode } from '../../types/game.types';
+import type { GameMode, Difficulty } from '../../types/game.types';
 
 interface StartScreenProps {
-  onStart: (mode: GameMode) => void;
+  onStart: (mode: GameMode, difficulty: Difficulty) => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
   const [selectedMode, setSelectedMode] = useState<GameMode>('CLASSIC');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('MEDIUM');
 
   const modes: { mode: GameMode; title: string; description: string; color: string }[] = [
     {
@@ -136,12 +137,42 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
         {getDescriptionText()}
       </div>
 
+      {/* Difficulty Selection */}
+      <div className="mb-4">
+        <p className="text-gray-400 text-xs mb-2">Difficulté (bonus):</p>
+        <div className="flex gap-2">
+          {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((diff) => {
+            const diffLabels = { EASY: 'Facile', MEDIUM: 'Normal', HARD: 'Difficile' };
+            const diffColors = { EASY: '#22c55e', MEDIUM: '#eab308', HARD: '#ef4444' };
+            return (
+              <button
+                key={diff}
+                onClick={() => setSelectedDifficulty(diff)}
+                className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                  selectedDifficulty === diff
+                    ? 'scale-105 text-black'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+                style={selectedDifficulty === diff ? { backgroundColor: diffColors[diff] } : undefined}
+              >
+                {diffLabels[diff]}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-gray-500 text-[10px] mt-1">
+          {selectedDifficulty === 'EASY' && 'Plus de bonus (25%)'}
+          {selectedDifficulty === 'MEDIUM' && 'Bonus standard (15%)'}
+          {selectedDifficulty === 'HARD' && 'Peu de bonus (5%)'}
+        </p>
+      </div>
+
       <div className="mb-4 text-sm text-gray-400 text-center">
         {getControlsText()}
       </div>
 
       <button
-        onClick={() => onStart(selectedMode)}
+        onClick={() => onStart(selectedMode, selectedDifficulty)}
         className={`px-8 py-3 ${buttonColorClass} text-black font-bold rounded-lg transition-colors text-xl`}
       >
         JOUER - {selectedConfig.title.toUpperCase()}

@@ -26,8 +26,9 @@ const POWERUP_WEIGHTS: Record<PowerUpType, number> = {
   EXTRA_LIFE: 20,
 };
 
-export function maybeSpawnPowerUp(x: number, y: number): PowerUp | null {
-  if (Math.random() > POWERUP_CONFIG.dropChance) {
+export function maybeSpawnPowerUp(x: number, y: number, dropChance?: number): PowerUp | null {
+  const effectiveDropChance = dropChance ?? POWERUP_CONFIG.dropChance;
+  if (Math.random() > effectiveDropChance) {
     return null;
   }
 

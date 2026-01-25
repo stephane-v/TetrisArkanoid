@@ -10,7 +10,7 @@ import { PauseMenu } from './UI/PauseMenu';
 import { GameOver } from './UI/GameOver';
 import { HUD } from './UI/HUD';
 import { RobotStatus } from './UI/RobotStatus';
-import type { GameMode } from '../types/game.types';
+import type { GameMode, Difficulty } from '../types/game.types';
 
 export const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -162,8 +162,8 @@ export const Game = () => {
     isRunning: gameState === 'PLAYING',
   });
 
-  const handleStart = useCallback((mode: GameMode) => {
-    start(mode);
+  const handleStart = useCallback((mode: GameMode, difficulty: Difficulty) => {
+    start(mode, difficulty);
   }, [start]);
 
   const handleResume = useCallback(() => {
@@ -191,11 +191,14 @@ export const Game = () => {
     }
   };
 
+  // Fixed header heights: HUD=28px, RobotStatus=20px
+  const headerHeight = gameMode === 'CLASSIC' ? 48 : 28;
+
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-950 py-4">
+    <div className="flex flex-col items-center min-h-screen bg-gray-950 py-2 overflow-hidden">
       <div
-        className="relative overflow-hidden rounded-lg shadow-2xl border border-gray-800"
-        style={{ width, height: height + 60 }}
+        className="relative overflow-hidden rounded-lg shadow-2xl border border-gray-800 flex flex-col"
+        style={{ width, height: height + headerHeight }}
       >
         <HUD
           stats={stats}
@@ -205,14 +208,9 @@ export const Game = () => {
           humanTetrisScore={humanTetris?.score}
         />
         {gameMode === 'CLASSIC' && <RobotStatus robot={robot} />}
-        {(gameMode === 'REVERSED' || gameMode === 'TWO_PLAYER') && humanTetris && (
-          <div className="absolute top-0 right-2 text-xs text-purple-400 z-10">
-            <span>Tetris: {humanTetris.linesCompleted} lignes</span>
-          </div>
-        )}
 
         <div
-          className="relative"
+          className="relative flex-grow"
           style={{
             width,
             height,

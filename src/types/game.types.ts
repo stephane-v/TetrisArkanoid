@@ -134,6 +134,9 @@ export type GameMode =
   | 'REVERSED'     // Human plays Tetris, Robot plays Arkanoid
   | 'TWO_PLAYER';  // Human vs Human
 
+// Difficulty levels
+export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
+
 // Human Tetris player state (for reversed and 2-player modes)
 export interface HumanTetrisState {
   currentPiece: Tetromino | null;
