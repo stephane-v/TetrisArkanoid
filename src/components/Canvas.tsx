@@ -149,8 +149,19 @@ function drawDangerZone(ctx: CanvasRenderingContext2D) {
   ctx.setLineDash([]);
 }
 
+// Cached pulse value updated once per frame
+let cachedPulseTime = 0;
+let cachedPulse = 0.5;
+
 function drawBlocks(ctx: CanvasRenderingContext2D, grid: GameGrid) {
   const { cellSize } = GRID_CONFIG;
+
+  // Update pulse once per frame
+  const now = performance.now();
+  if (now - cachedPulseTime > 16) {
+    cachedPulse = Math.sin(now / 100) * 0.3 + 0.5;
+    cachedPulseTime = now;
+  }
 
   for (let y = 0; y < grid.config.height; y++) {
     for (let x = 0; x < grid.config.width; x++) {
@@ -181,9 +192,8 @@ function drawBlocks(ctx: CanvasRenderingContext2D, grid: GameGrid) {
           cellSize - padding * 2
         );
 
-        // Pulsing effect
-        const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.5;
-        ctx.fillStyle = `rgba(255, 0, 0, ${pulse * 0.3})`;
+        // Pulsing effect (use cached value)
+        ctx.fillStyle = `rgba(255, 0, 0, ${cachedPulse * 0.3})`;
         ctx.fillRect(
           canvasPos.x + padding,
           canvasPos.y + padding,
@@ -363,17 +373,16 @@ function drawPowerUps(ctx: CanvasRenderingContext2D, powerUps: PowerUp[]) {
     const color = getPowerUpColor(powerUp.type);
     const icon = getPowerUpIcon(powerUp.type);
 
-    // Glow effect
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10;
-
-    // Power-up background
+    // Power-up background (no shadow for performance)
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(powerUp.x, powerUp.y, size / 2, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.shadowBlur = 0;
+    // Simple border instead of glow
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
     // Icon
     ctx.fillStyle = '#000';
@@ -384,31 +393,37 @@ function drawPowerUps(ctx: CanvasRenderingContext2D, powerUps: PowerUp[]) {
   }
 }
 
+// Cache for blink state to avoid Date.now() calls
+let lastBlinkTime = 0;
+let blinkState = false;
+
 function drawPaddle(ctx: CanvasRenderingContext2D, paddle: Paddle, isAI: boolean = false, blinkTimeRemaining: number | null = null) {
   // Different color for AI paddle
   let paddleColor = isAI ? '#ff6b6b' : COLORS.paddle;
 
   // Blink effect when large paddle power-up is about to expire (last 3 seconds)
-  let shouldBlink = false;
   if (blinkTimeRemaining !== null && blinkTimeRemaining < 3000) {
-    // Fast blink: toggle every 100ms
-    shouldBlink = Math.floor(Date.now() / 100) % 2 === 0;
-    if (shouldBlink) {
+    // Update blink state every 100ms
+    const now = performance.now();
+    if (now - lastBlinkTime > 100) {
+      blinkState = !blinkState;
+      lastBlinkTime = now;
+    }
+    if (blinkState) {
       paddleColor = '#ff4444'; // Red flash
     }
   }
 
-  // Glow effect
-  ctx.shadowColor = paddleColor;
-  ctx.shadowBlur = shouldBlink ? 15 : 10;
-
-  // Main paddle
+  // Main paddle (no shadow for performance)
   ctx.fillStyle = paddleColor;
   ctx.beginPath();
   ctx.roundRect(paddle.x, paddle.y, paddle.width, paddle.height, 4);
   ctx.fill();
 
-  ctx.shadowBlur = 0;
+  // Simple border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 
   // AI indicator
   if (isAI) {
@@ -417,27 +432,21 @@ function drawPaddle(ctx: CanvasRenderingContext2D, paddle: Paddle, isAI: boolean
     ctx.textAlign = 'center';
     ctx.fillText('AI', paddle.x + paddle.width / 2, paddle.y + paddle.height / 2 + 3);
   }
-
-  // Highlight
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(paddle.x + 4, paddle.y + 2);
-  ctx.lineTo(paddle.x + paddle.width - 4, paddle.y + 2);
-  ctx.stroke();
 }
 
 function drawBall(ctx: CanvasRenderingContext2D, ball: Ball) {
-  // Glow effect
-  ctx.shadowColor = ball.color;
-  ctx.shadowBlur = ball.isPowered ? 20 : 10;
-
+  // Main ball (no shadow for performance)
   ctx.fillStyle = ball.color;
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.shadowBlur = 0;
+  // Border for powered ball
+  if (ball.isPowered) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 
   // Inner highlight
   ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
@@ -458,10 +467,18 @@ function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]) {
   ctx.globalAlpha = 1;
 }
 
-function drawLaunchIndicator(ctx: CanvasRenderingContext2D, ball: Ball) {
-  const pulse = Math.sin(Date.now() / 200) * 0.3 + 0.7;
+// Cache for launch indicator pulse
+let launchPulseTime = 0;
+let launchPulse = 0.7;
 
-  ctx.globalAlpha = pulse;
+function drawLaunchIndicator(ctx: CanvasRenderingContext2D, ball: Ball) {
+  const now = performance.now();
+  if (now - launchPulseTime > 16) {
+    launchPulse = Math.sin(now / 200) * 0.3 + 0.7;
+    launchPulseTime = now;
+  }
+
+  ctx.globalAlpha = launchPulse;
   ctx.fillStyle = '#ffffff';
   ctx.font = '14px monospace';
   ctx.textAlign = 'center';
