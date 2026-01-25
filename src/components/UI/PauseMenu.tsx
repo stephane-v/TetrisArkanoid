@@ -1,11 +1,16 @@
-import React from 'react';
-
 interface PauseMenuProps {
   onResume: () => void;
   onRestart: () => void;
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
 }
 
-export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onRestart }) => {
+export const PauseMenu: React.FC<PauseMenuProps> = ({
+  onResume,
+  onRestart,
+  soundEnabled = true,
+  onToggleSound,
+}) => {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white z-10">
       <h2 className="text-3xl font-bold mb-8 text-yellow-400">PAUSED</h2>
@@ -24,9 +29,21 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onRestart }) => 
         >
           RESTART
         </button>
+
+        {onToggleSound && (
+          <button
+            onClick={onToggleSound}
+            className="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>SOUND:</span>
+            <span className={soundEnabled ? 'text-green-400' : 'text-red-400'}>
+              {soundEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
+        )}
       </div>
 
-      <p className="mt-6 text-sm text-gray-400">Press ESC or SPACE to resume</p>
+      <p className="mt-6 text-sm text-gray-400">Press P, ESC or SPACE to resume</p>
     </div>
   );
 };

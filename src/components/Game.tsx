@@ -1,8 +1,9 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { useGameLoop } from '../hooks/useGameLoop';
 import { useInput } from '../hooks/useInput';
 import { useResponsive } from '../hooks/useResponsive';
+import { useSound } from '../hooks/useSound';
 import { Canvas } from './Canvas';
 import { StartScreen } from './UI/StartScreen';
 import { PauseMenu } from './UI/PauseMenu';
@@ -13,6 +14,8 @@ import { RobotStatus } from './UI/RobotStatus';
 export const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { width, height } = useResponsive();
+  const sound = useSound();
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const {
     gameState,
@@ -22,6 +25,8 @@ export const Game = () => {
     activePowerUps,
     gameOverReason,
     ballLaunched,
+    balls,
+    powerUps,
     start,
     pause,
     resume,
@@ -29,6 +34,67 @@ export const Game = () => {
     update,
     reset,
   } = useGameStore();
+
+  // Track previous values for sound effects
+  const prevStatsRef = useRef(stats);
+  const prevBallsRef = useRef(balls.length);
+  const prevPowerUpsRef = useRef(powerUps.length);
+  const prevRobotLinesRef = useRef(robot.linesCompleted);
+  const prevGameStateRef = useRef(gameState);
+
+  // Sound effects based on state changes
+  useEffect(() => {
+    const prevStats = prevStatsRef.current;
+    const prevBallCount = prevBallsRef.current;
+    const prevPowerUpCount = prevPowerUpsRef.current;
+    const prevRobotLines = prevRobotLinesRef.current;
+    const prevGameState = prevGameStateRef.current;
+
+    // Ball lost
+    if (balls.length < prevBallCount && gameState === 'PLAYING') {
+      sound.ballLost();
+    }
+
+    // Block destroyed
+    if (stats.blocksDestroyed > prevStats.blocksDestroyed) {
+      sound.blockDestroy();
+    }
+
+    // Power-up collected
+    if (powerUps.length < prevPowerUpCount && stats.score > prevStats.score) {
+      sound.powerUp();
+    }
+
+    // Robot completed a line
+    if (robot.linesCompleted > prevRobotLines) {
+      sound.lineComplete();
+    }
+
+    // Level up
+    if (stats.level > prevStats.level) {
+      sound.levelUp();
+    }
+
+    // Game state changes
+    if (gameState !== prevGameState) {
+      if (gameState === 'PLAYING' && prevGameState === 'START') {
+        sound.gameStart();
+      } else if (gameState === 'PAUSED') {
+        sound.pause();
+      } else if (gameState === 'PLAYING' && prevGameState === 'PAUSED') {
+        sound.resume();
+      } else if (gameState === 'GAME_OVER') {
+        sound.gameOver();
+      }
+    }
+
+    // Update refs
+    prevStatsRef.current = stats;
+    prevBallsRef.current = balls.length;
+    prevPowerUpsRef.current = powerUps.length;
+    prevRobotLinesRef.current = robot.linesCompleted;
+    prevGameStateRef.current = gameState;
+  }, [stats, balls.length, powerUps.length, robot.linesCompleted, gameState, sound]);
 
   const handleSpace = useCallback(() => {
     if (gameState === 'START') {
@@ -39,11 +105,12 @@ export const Game = () => {
       reset();
       start();
     } else if (gameState === 'PLAYING' && !ballLaunched) {
+      sound.launch();
       launchBall();
     }
-  }, [gameState, ballLaunched, start, resume, reset, launchBall]);
+  }, [gameState, ballLaunched, start, resume, reset, launchBall, sound]);
 
-  const handleEscape = useCallback(() => {
+  const handlePause = useCallback(() => {
     if (gameState === 'PLAYING') {
       pause();
     } else if (gameState === 'PAUSED') {
@@ -51,10 +118,15 @@ export const Game = () => {
     }
   }, [gameState, pause, resume]);
 
+  const handleEscape = useCallback(() => {
+    handlePause();
+  }, [handlePause]);
+
   const input = useInput({
     canvasRef,
     onSpace: handleSpace,
     onEscape: handleEscape,
+    onPause: handlePause,
   });
 
   const handleUpdate = useCallback(
@@ -82,6 +154,12 @@ export const Game = () => {
     start();
   }, [reset, start]);
 
+  const toggleSound = useCallback(() => {
+    const newEnabled = !soundEnabled;
+    setSoundEnabled(newEnabled);
+    sound.setEnabled(newEnabled);
+  }, [soundEnabled, sound]);
+
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-950 py-4">
       <div
@@ -105,7 +183,12 @@ export const Game = () => {
           {gameState === 'START' && <StartScreen onStart={handleStart} />}
 
           {gameState === 'PAUSED' && (
-            <PauseMenu onResume={handleResume} onRestart={handleRestart} />
+            <PauseMenu
+              onResume={handleResume}
+              onRestart={handleRestart}
+              soundEnabled={soundEnabled}
+              onToggleSound={toggleSound}
+            />
           )}
 
           {gameState === 'GAME_OVER' && (
@@ -121,7 +204,7 @@ export const Game = () => {
       </div>
 
       <div className="mt-4 text-gray-600 text-xs text-center">
-        <p>Move: Mouse/Touch or Arrow Keys | Launch: Space/Click | Pause: Escape</p>
+        <p>Move: Mouse/Touch or Arrow Keys | Launch: Space/Click | Pause: P or Escape</p>
       </div>
     </div>
   );

@@ -13,15 +13,17 @@ interface UseInputOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   onSpace?: () => void;
   onEscape?: () => void;
+  onPause?: () => void;
 }
 
-export function useInput({ canvasRef, onSpace, onEscape }: UseInputOptions): InputState {
+export function useInput({ canvasRef, onSpace, onEscape, onPause }: UseInputOptions): InputState {
   const [mouseX, setMouseX] = useState<number | null>(null);
   const keysRef = useRef({
     left: false,
     right: false,
     space: false,
     escape: false,
+    pause: false,
   });
   const [, forceUpdate] = useState({});
 
@@ -81,9 +83,17 @@ export function useInput({ canvasRef, onSpace, onEscape }: UseInputOptions): Inp
             forceUpdate({});
           }
           break;
+        case 'KeyP':
+          e.preventDefault();
+          if (!keysRef.current.pause) {
+            keysRef.current.pause = true;
+            onPause?.();
+            forceUpdate({});
+          }
+          break;
       }
     },
-    [onSpace, onEscape]
+    [onSpace, onEscape, onPause]
   );
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -104,6 +114,10 @@ export function useInput({ canvasRef, onSpace, onEscape }: UseInputOptions): Inp
         break;
       case 'Escape':
         keysRef.current.escape = false;
+        forceUpdate({});
+        break;
+      case 'KeyP':
+        keysRef.current.pause = false;
         forceUpdate({});
         break;
     }
