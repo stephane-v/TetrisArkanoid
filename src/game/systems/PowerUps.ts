@@ -43,6 +43,19 @@ export function maybeSpawnPowerUp(x: number, y: number, dropChance?: number): Po
   };
 }
 
+// Spawn a guaranteed power-up (used for hard drop bonus to Arkanoid player)
+export function spawnGuaranteedPowerUp(x: number, y: number): PowerUp {
+  const type = getWeightedRandomPowerUp();
+
+  return {
+    id: `powerup_${++powerUpIdCounter}`,
+    type,
+    x,
+    y,
+    vy: POWERUP_CONFIG.fallSpeed,
+  };
+}
+
 function getWeightedRandomPowerUp(): PowerUpType {
   const totalWeight = Object.values(POWERUP_WEIGHTS).reduce((sum, w) => sum + w, 0);
   let random = Math.random() * totalWeight;

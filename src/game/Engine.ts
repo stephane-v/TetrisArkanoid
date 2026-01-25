@@ -23,6 +23,7 @@ import { createRobotState, updateRobot, commitPlacement, freezeRobot, unfreezeRo
 import { processLineCompletion, checkLinePrevention } from './systems/LineDetection';
 import {
   maybeSpawnPowerUp,
+  spawnGuaranteedPowerUp,
   updatePowerUp,
   checkPowerUpPaddleCollision,
   applyPowerUp,
@@ -499,6 +500,14 @@ function updateReversedMode(
         return newState;
       }
     }
+
+    // Hard drop bonus: spawn power-up for AI Arkanoid player
+    if (tetrisResult.usedHardDrop) {
+      // Spawn power-up from a random position near the top of the grid
+      const randomX = CANVAS_CONFIG.gridOffsetX + Math.random() * (GRID_CONFIG.width * GRID_CONFIG.cellSize);
+      const powerUp = spawnGuaranteedPowerUp(randomX, CANVAS_CONFIG.gridOffsetY + 50);
+      newState.powerUps = [...newState.powerUps, powerUp];
+    }
   }
 
   // Update line warnings
@@ -651,6 +660,13 @@ function updateTwoPlayerMode(
         newState.gameOverReason = 'BLOCKS_REACHED_BOTTOM';
         return newState;
       }
+    }
+
+    // Hard drop bonus: spawn power-up for Arkanoid player (Player 2)
+    if (tetrisResult.usedHardDrop) {
+      const randomX = CANVAS_CONFIG.gridOffsetX + Math.random() * (GRID_CONFIG.width * GRID_CONFIG.cellSize);
+      const powerUp = spawnGuaranteedPowerUp(randomX, CANVAS_CONFIG.gridOffsetY + 50);
+      newState.powerUps = [...newState.powerUps, powerUp];
     }
   }
 

@@ -54,6 +54,7 @@ export interface HumanTetrisUpdateResult {
   grid: GameGrid;
   piecePlaced: boolean;
   linesCleared: number;
+  usedHardDrop: boolean;
 }
 
 export function updateHumanTetris(
@@ -64,7 +65,7 @@ export function updateHumanTetris(
   level: number
 ): HumanTetrisUpdateResult {
   if (!state.currentPiece) {
-    return { state, grid, piecePlaced: false, linesCleared: 0 };
+    return { state, grid, piecePlaced: false, linesCleared: 0, usedHardDrop: false };
   }
 
   // Store current piece in a local variable that TypeScript knows is non-null
@@ -73,6 +74,7 @@ export function updateHumanTetris(
   let newGrid = grid;
   let piecePlaced = false;
   let linesCleared = 0;
+  let usedHardDrop = false;
 
   const deltaMs = deltaTime * 1000;
 
@@ -186,6 +188,7 @@ export function updateHumanTetris(
     // Place the piece immediately
     newGrid = placeTetromino(grid, currentPiece, newState.currentX, newState.currentY, level);
     piecePlaced = true;
+    usedHardDrop = true;  // Signal that hard drop was used (gives bonus to opponent)
   } else {
     // Handle soft drop and natural drop
     newState.softDropping = input.softDrop;
@@ -233,6 +236,7 @@ export function updateHumanTetris(
     grid: newGrid,
     piecePlaced,
     linesCleared,
+    usedHardDrop,
   };
 }
 
