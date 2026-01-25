@@ -4,6 +4,7 @@ import {
   removeLines,
   dropAllBlocks,
   applyGravity,
+  applyGravityIntoDangerZone,
   updateLineWarnings,
   hasBlocksInDangerZone,
   countFilledBlocks,
@@ -33,16 +34,19 @@ export function processLineCompletion(
   // Remove completed lines
   let newGrid = removeLines(grid, completedLines);
 
+  // Apply normal gravity to fill gaps from removed lines (stays above danger zone)
+  newGrid = applyGravity(newGrid);
+
   // If player has shield, don't apply gravity penalty
   if (!hasShield) {
     // Apply gravity penalty - all blocks drop down by number of lines completed
+    // This pushes blocks INTO the danger zone
     for (let i = 0; i < completedLines.length; i++) {
       newGrid = dropAllBlocks(newGrid, 1);
     }
+    // Apply gravity again to ensure blocks settle properly in danger zone
+    newGrid = applyGravityIntoDangerZone(newGrid);
   }
-
-  // Apply normal gravity to fill gaps
-  newGrid = applyGravity(newGrid);
 
   // Update warning states
   newGrid = updateLineWarnings(newGrid);

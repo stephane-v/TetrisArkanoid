@@ -154,12 +154,40 @@ export function applyGravity(grid: GameGrid): GameGrid {
     newBlocks[y] = new Array(grid.config.width).fill(null);
   }
 
-  // Process each column
+  // Process each column - blocks fall to fill gaps but stay above danger zone
   for (let x = 0; x < grid.config.width; x++) {
     let writeY = grid.config.height - grid.config.dangerZone - 1;
 
     // Scan from bottom to top (excluding danger zone)
     for (let y = grid.config.height - grid.config.dangerZone - 1; y >= 0; y--) {
+      if (grid.blocks[y]?.[x]) {
+        newBlocks[writeY][x] = grid.blocks[y][x];
+        writeY--;
+      }
+    }
+  }
+
+  return {
+    ...grid,
+    blocks: newBlocks,
+  };
+}
+
+// Apply gravity that allows blocks to fall into danger zone (used for penalty)
+export function applyGravityIntoDangerZone(grid: GameGrid): GameGrid {
+  const newBlocks: (Block | null)[][] = [];
+
+  // Initialize with null
+  for (let y = 0; y < grid.config.height; y++) {
+    newBlocks[y] = new Array(grid.config.width).fill(null);
+  }
+
+  // Process each column - blocks can fall all the way to the bottom
+  for (let x = 0; x < grid.config.width; x++) {
+    let writeY = grid.config.height - 1;
+
+    // Scan from bottom to top (including danger zone)
+    for (let y = grid.config.height - 1; y >= 0; y--) {
       if (grid.blocks[y]?.[x]) {
         newBlocks[writeY][x] = grid.blocks[y][x];
         writeY--;

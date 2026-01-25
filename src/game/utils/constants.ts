@@ -4,7 +4,7 @@ import type { DifficultyConfig, GridConfig } from '../../types/game.types';
 export const GRID_CONFIG: GridConfig = {
   width: 10,
   height: 20,
-  dangerZone: 3,
+  dangerZone: 5,  // Increased from 3 to 5 rows
   cellSize: 28,
 };
 
