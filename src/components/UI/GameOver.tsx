@@ -32,8 +32,9 @@ export const GameOver: React.FC<GameOverProps> = ({
 
   const getWinnerText = () => {
     if (gameMode === 'CLASSIC') {
-      const won = robotScore !== undefined && stats.score > robotScore;
-      return won ? 'VICTOIRE!' : 'DÉFAITE!';
+      // In classic mode, player plays Arkanoid - if player loses all balls, player loses
+      // If blocks reach danger zone, the Tetris robot loses, so player wins
+      return reason === 'NO_BALLS' ? 'DÉFAITE!' : 'VICTOIRE!';
     }
     if (gameMode === 'REVERSED') {
       // In reversed mode, player plays Tetris - if blocks reach danger, player loses
@@ -50,7 +51,8 @@ export const GameOver: React.FC<GameOverProps> = ({
 
   const isWin = () => {
     if (gameMode === 'CLASSIC') {
-      return robotScore !== undefined && stats.score > robotScore;
+      // Player wins if blocks reached danger (robot lost)
+      return reason !== 'NO_BALLS';
     }
     if (gameMode === 'REVERSED') {
       return reason === 'NO_BALLS';
