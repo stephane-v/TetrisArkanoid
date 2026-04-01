@@ -1,0 +1,21 @@
+services:
+  tetrikanoid:
+    build: .
+    container_name: tetrikanoid
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tetrikanoid.rule=Host(`tetrikanoid.emdr.andragia.fr`)"
+      - "traefik.http.routers.tetrikanoid.entrypoints=websecure"
+      - "traefik.http.services.tetrikanoid.loadbalancer.server.port=3000"
+      - "traefik.http.routers.tetrikanoid.tls=true"
+      - "traefik.http.routers.tetrikanoid.tls.certresolver=le"
+    networks:
+      - web
+      - internal
+
+networks:
+  web:
+    external: true
+  internal:
+    external: false
