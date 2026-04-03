@@ -5,11 +5,11 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.tetrikanoid.rule=Host(`tetrikanoid.emdr.andragia.fr`)"
+      - "traefik.http.routers.tetrikanoid.rule=Host(`${APP_DOMAIN}`)"
       - "traefik.http.routers.tetrikanoid.entrypoints=websecure"
-      - "traefik.http.services.tetrikanoid.loadbalancer.server.port=3000"
+      - "traefik.http.services.tetrikanoid.loadbalancer.server.port=${APP_PORT:-3000}"
       - "traefik.http.routers.tetrikanoid.tls=true"
-      - "traefik.http.routers.tetrikanoid.tls.certresolver=le"
+      - "traefik.http.routers.tetrikanoid.tls.certresolver=${TLS_CERTRESOLVER:-le}"
     networks:
       - web
       - internal
