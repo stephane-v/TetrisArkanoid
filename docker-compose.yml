@@ -10,6 +10,7 @@ services:
       - "traefik.http.services.tetrikanoid.loadbalancer.server.port=${APP_PORT:-3000}"
       - "traefik.http.routers.tetrikanoid.tls=true"
       - "traefik.http.routers.tetrikanoid.tls.certresolver=${TLS_CERTRESOLVER:-le}"
+      - "traefik.http.routers.tetrikanoid.middlewares=hdg-beta@file"
     networks:
       - web
       - internal
